@@ -130,7 +130,7 @@ dta_gen = function (n, ds, r, b1 = 0.1, b2 = 0.1, spec = 1) {
     }
     V = bdiag(Vs) # (d1 + ... + dm) by (d1 + ... + dm - m)
     
-    A_tilde = as.matrix(V %*% A)
+    A_tilde = as.matrix(V %*% A) # (d1 + ... + dm) by r
     for (t in 1:n) {
       Z[t,] = A_tilde %*% c(Fs[,t])
     }
@@ -144,7 +144,7 @@ dta_gen = function (n, ds, r, b1 = 0.1, b2 = 0.1, spec = 1) {
         lower_idx = sum(ds[1:(j - 1)])
       }
       idx_range = (lower_idx + 1):(lower_idx + ds[j])
-      temp = Exp_sphere(Z[,idx_range], mus[[j]]) # n by dj
+      temp = Exp_sphere(mus[[j]] + Z[,idx_range], mus[[j]]) # n by dj
       for (t in 1:n) {
         X[t,idx_range] = Exp_sphere(perp_proj(temp[t,] + runif(ds[j], min = -b2, max = b2), 
                                               temp[t,]), 
@@ -156,7 +156,7 @@ dta_gen = function (n, ds, r, b1 = 0.1, b2 = 0.1, spec = 1) {
   return (list("X" = X, "A_tilde" = A_tilde, "A" = A, "Fs" = Fs, "Z" = Z, "mus" = mus))
 }
 
-mean_on_sphere = function (x, tau = 0.05, tol = 1e-8, max.iter = 1000) {
+mean_on_sphere = function (x, tau = 0.1, tol = 1e-8, max.iter = 1000, verbose = FALSE) {
   # x: (n by d) matrix of data
   # tau: stepsize
   # estimate intrinsic mean on the sphere
@@ -164,15 +164,18 @@ mean_on_sphere = function (x, tau = 0.05, tol = 1e-8, max.iter = 1000) {
   mu = x[1,]
   for (i in 1:max.iter) {
     grad = -colMeans(Log_sphere(x, mu))
-    mu_new = Exp_sphere(tau * grad, mu)
+    mu_new = Exp_sphere(mu - tau * grad, mu)
     
-    cat(mu_new, "\n")
-    if (norm(mu_new - mu, "2") < tol) {
+    loss = mean(acos(x %*% mu_new / sqrt(rowSums(x^2))))
+    if (i > 1 && (loss_old - loss < tol)) {
       mu = mu_new
       break
-    } else {
-      mu = mu_new
     }
+    if (verbose) {
+      cat("mean_on_sphere: loss", round(loss, 4), "\n")
+    }
+    mu = mu_new
+    loss_old = loss
   }
   
   return (mu)
@@ -192,7 +195,7 @@ subspace_loss = function (A_hat , A) {
   return (sqrt(temp))
 }
 
-simulation = function (n, ds, r, sd1, sd2, spec) {
+simulation = function (n, ds, r, sd1, sd2, spec, mu_tol = 1e-3) {
   dta = dta_gen (n, ds, r, sd1, sd2, spec)
   
   m = length(ds)
@@ -202,7 +205,7 @@ simulation = function (n, ds, r, sd1, sd2, spec) {
   for (j in 1:m) {
     lower_idx = ifelse(j == 1, 0, sum(ds[1:(j - 1)]))
     idx_range = (lower_idx + 1):(lower_idx + ds[j])
-    mu_hat[[j]] = mean_on_sphere(dta$X[,idx_range])
+    mu_hat[[j]] = mean_on_sphere(dta$X[,idx_range], tol = mu_tol)
     trans_x[,idx_range] = Log_sphere(dta$X[,idx_range], mu_hat[[j]])
     trans_x_oracle[,idx_range] = Log_sphere(dta$X[,idx_range], dta$mus[[j]])
   }
@@ -233,12 +236,12 @@ simulation = function (n, ds, r, sd1, sd2, spec) {
 
 # Simulation
 max.sim = 100
-n = 300
-ds = c(3)
+n = 600
+ds = c(6, 8)
 r = 3
 snr = 0.8
-sd1 = 5 * snr * pi / (20 * r * sqrt(max(ds)))
-sd2 = 0.001 * (1 - snr) * pi / (20 * r * sqrt(max(ds)))
+sd1 = snr * pi / (20 * r * sqrt(max(ds)))
+sd2 = (1 - snr) * pi / (20 * r * sqrt(max(ds)))
 spec = 1
 
 A_loss = rep(0, max.sim)
