@@ -5,7 +5,7 @@ library(Matrix)
 Exp_sphere = function (x, mu) {
   # x: an (m by d) matrix or a vector on the tangent space
   # mu: an d-dimensional vector of the reference point
-  # tanget space --> sphere
+  # tangent space --> sphere
   
   if (is.matrix(x)) {
     x_norm = sqrt(rowSums(x^2))
@@ -144,7 +144,7 @@ dta_gen = function (n, ds, r, b1 = 0.1, b2 = 0.1, spec = 1) {
         lower_idx = sum(ds[1:(j - 1)])
       }
       idx_range = (lower_idx + 1):(lower_idx + ds[j])
-      temp = Exp_sphere(mus[[j]] + Z[,idx_range], mus[[j]]) # n by dj
+      temp = Exp_sphere(t(mus[[j]] + t(Z[,idx_range])), mus[[j]]) # n by dj
       for (t in 1:n) {
         X[t,idx_range] = Exp_sphere(perp_proj(temp[t,] + runif(ds[j], min = -b2, max = b2), 
                                               temp[t,]), 
@@ -153,7 +153,113 @@ dta_gen = function (n, ds, r, b1 = 0.1, b2 = 0.1, spec = 1) {
     }
   }
   
-  return (list("X" = X, "A_tilde" = A_tilde, "A" = A, "Fs" = Fs, "Z" = Z, "mus" = mus))
+  if (spec == 2) {
+    m = length(ds)
+    
+    # generate reference points
+    mus = vector("list", length = m)
+    for (i in 1:m) {
+      temp = rnorm(ds[i])
+      mus[[i]] = temp / norm(temp, type = "2")
+    }
+    
+    # generate latent factor processes
+    Fs = matrix(0, nrow = r, ncol = n + 100)
+    for (t in 2:(n + 100)) {
+      Fs[,t] = 0.9 * Fs[,t - 1] + runif(r, min = -b1, max = b1)
+    }
+    Fs = Fs[,-c(1:100)] # r by n
+    
+    # generate factor loadings
+    A = matrix(runif((sum(ds) - m) * r, min = -2, max = 2), nrow = sum(ds) - m, ncol = r)
+    A[sample(sum(ds) - m, floor(0.3 * (sum(ds) - m))),] = 0
+    # A is (d1 + d2 + ... + dm - m) by r
+    
+    # generate latent observations (embeded in the ambient space)
+    Z = matrix(NA, nrow = n, ncol = sum(ds))
+    Vs = vector("list", length = m)
+    for (j in 1:m) {
+      Vs[[j]] = svd(mus[[j]], nu = ds[j], nv = ds[j])$u[,-1] # Coordinate system
+    }
+    V = bdiag(Vs) # (d1 + ... + dm) by (d1 + ... + dm - m)
+    
+    A_tilde = as.matrix(V %*% A) # (d1 + ... + dm) by r
+    for (t in 1:n) {
+      Z[t,] = A_tilde %*% c(Fs[,t])
+    }
+    
+    # generate observations
+    X = matrix(NA, nrow = n, ncol = sum(ds))
+    for (j in 1:m) {
+      if (j == 1) {
+        lower_idx = 0
+      } else {
+        lower_idx = sum(ds[1:(j - 1)])
+      }
+      idx_range = (lower_idx + 1):(lower_idx + ds[j])
+      temp = Exp_sphere(t(mus[[j]] + t(Z[,idx_range])), mus[[j]]) # n by dj
+      for (t in 1:n) {
+        X[t,idx_range] = Exp_sphere(perp_proj(temp[t,] + runif(ds[j], min = -b2, max = b2), 
+                                              temp[t,]), 
+                                    temp[t,])
+      }
+    }
+  }
+  
+  if (spec == 3) {
+    m = length(ds)
+    
+    # generate reference points
+    mus = vector("list", length = m)
+    for (i in 1:m) {
+      temp = rnorm(ds[i])
+      mus[[i]] = temp / norm(temp, type = "2")
+    }
+    
+    # generate latent factor processes
+    Fs = matrix(0, nrow = r, ncol = n + 100)
+    for (t in 2:(n + 100)) {
+      Fs[,t] = 0.9 * Fs[,t - 1] + runif(r, min = -b1, max = b1)
+    }
+    Fs = Fs[,-c(1:100)] # r by n
+    
+    # generate factor loadings
+    A = matrix(runif((sum(ds) - m) * r, min = -0.5, max = 0.5), nrow = sum(ds) - m, ncol = r)
+    # A is (d1 + d2 + ... + dm - m) by r
+    
+    # generate latent observations (embeded in the ambient space)
+    Z = matrix(NA, nrow = n, ncol = sum(ds))
+    Vs = vector("list", length = m)
+    for (j in 1:m) {
+      Vs[[j]] = svd(mus[[j]], nu = ds[j], nv = ds[j])$u[,-1] # Coordinate system
+    }
+    V = bdiag(Vs) # (d1 + ... + dm) by (d1 + ... + dm - m)
+    
+    A_tilde = as.matrix(V %*% A) # (d1 + ... + dm) by r
+    for (t in 1:n) {
+      Z[t,] = A_tilde %*% c(Fs[,t])
+    }
+    
+    # generate observations
+    X = matrix(NA, nrow = n, ncol = sum(ds))
+    for (j in 1:m) {
+      if (j == 1) {
+        lower_idx = 0
+      } else {
+        lower_idx = sum(ds[1:(j - 1)])
+      }
+      idx_range = (lower_idx + 1):(lower_idx + ds[j])
+      temp = Exp_sphere(t(mus[[j]] + t(Z[,idx_range])), mus[[j]]) # n by dj
+      for (t in 1:n) {
+        X[t,idx_range] = Exp_sphere(perp_proj(temp[t,] + runif(ds[j], min = -b2, max = b2), 
+                                              temp[t,]), 
+                                    temp[t,])
+      }
+    }
+  }
+  
+  
+  return (list("X" = X, "A_tilde" = A_tilde, "A" = A, "Fs" = Fs, "Z" = Z, "mus" = mus, "Vs" = Vs))
 }
 
 mean_on_sphere = function (x, tau = 0.1, tol = 1e-8, max.iter = 1000, verbose = FALSE) {
@@ -161,10 +267,11 @@ mean_on_sphere = function (x, tau = 0.1, tol = 1e-8, max.iter = 1000, verbose = 
   # tau: stepsize
   # estimate intrinsic mean on the sphere
   
-  mu = x[1,]
+  n = nrow(x)
+  mu = x[sample(n, 1),]
   for (i in 1:max.iter) {
-    grad = -colMeans(Log_sphere(x, mu))
-    mu_new = Exp_sphere(mu - tau * grad, mu)
+    grad = colMeans(Log_sphere(x, mu))
+    mu_new = Exp_sphere(mu + tau * grad, mu)
     
     loss = mean(acos(x %*% mu_new / sqrt(rowSums(x^2))))
     if (i > 1 && (loss_old - loss < tol)) {
@@ -172,7 +279,7 @@ mean_on_sphere = function (x, tau = 0.1, tol = 1e-8, max.iter = 1000, verbose = 
       break
     }
     if (verbose) {
-      cat("mean_on_sphere: loss", round(loss, 4), "\n")
+      cat("mean_on_sphere: iter", i, "; loss", round(loss, 4), "\n")
     }
     mu = mu_new
     loss_old = loss
@@ -235,14 +342,14 @@ simulation = function (n, ds, r, sd1, sd2, spec, mu_tol = 1e-3) {
 }
 
 # Simulation
-max.sim = 100
+max.sim = 500
 n = 600
-ds = c(6, 8)
+ds = rep(10, 5)
 r = 3
-snr = 0.8
-sd1 = snr * pi / (20 * r * sqrt(max(ds)))
-sd2 = (1 - snr) * pi / (20 * r * sqrt(max(ds)))
-spec = 1
+snr = 0.6
+b1 = 0.5 * snr * pi / (20 * r * sqrt(max(ds)))
+b2 = 0.5 * (1 - snr) * pi / (20 * r * sqrt(max(ds)))
+spec = 3
 
 A_loss = rep(0, max.sim)
 RSS1 = rep(0, max.sim)
@@ -250,22 +357,26 @@ RSS2 = rep(0, max.sim)
 mu_loss = rep(0, max.sim)
 
 for (sim in 1:max.sim) {
-  res = simulation(n, ds, r, sd1, sd2, spec)
+  res = simulation(n, ds, r, b1, b2, spec)
   
   A_loss[sim] = res$subspace_loss
-  RSS1[sim] = res$RSS1
-  RSS2[sim] = res$RSS2
+  RSS1[sim] = sqrt(res$RSS1)
+  RSS2[sim] = sqrt(res$RSS2)
   mu_loss[sim] = mean(res$mu_loss)
   
-  cat("iteration", sim, "\n")
+  # cat("iteration", sim, "\n")
 }
 
 mean(A_loss); sd(A_loss)
-mean(RSS1); sd(RSS1)
-mean(RSS2); sd(RSS2)
+# mean(RSS1); sd(RSS1)
+# mean(RSS2); sd(RSS2)
+mean(RSS1 / RSS2); sd(RSS1 / RSS2)
+
 mean(mu_loss); sd(mu_loss)
 
-hist(mu_loss, breaks = 30)
+
+
+
 
 
 
