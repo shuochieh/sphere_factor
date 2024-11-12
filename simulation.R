@@ -79,7 +79,8 @@ LYB_fm = function (x, r, h, demean = TRUE) {
   f_hat = t(t(V) %*% t(x)) # (n by r)
   e_hat = x - f_hat %*% t(V)
   
-  return (list("V" = V, "f_hat" = f_hat, "e_hat" = e_hat))
+  return (list("V" = V, "f_hat" = f_hat, "e_hat" = e_hat, 
+               "fitted.val" = f_hat %*% t(V)))
 }
 
 perp_proj = function (x, mu) {
@@ -93,7 +94,7 @@ perp_proj = function (x, mu) {
   return (res)
 }
 
-dta_gen = function (n, ds, r, sd1 = 0.1, sd2 = 0.1, spec = 1) {
+dta_gen = function (n, ds, r, b1 = 0.1, b2 = 0.1, spec = 1) {
   # n: sample size
   # ds: a vector of the dimensions of the ambient Euclidean spaces for each spherical
   #     component
@@ -113,7 +114,7 @@ dta_gen = function (n, ds, r, sd1 = 0.1, sd2 = 0.1, spec = 1) {
     # generate latent factor processes
     Fs = matrix(0, nrow = r, ncol = n + 100)
     for (t in 2:(n + 100)) {
-      Fs[,t] = 0.9 * Fs[,t - 1] + rnorm(r, sd = sd1)
+      Fs[,t] = 0.9 * Fs[,t - 1] + runif(r, min = -b1, max = b1)
     }
     Fs = Fs[,-c(1:100)] # r by n
     
@@ -145,7 +146,8 @@ dta_gen = function (n, ds, r, sd1 = 0.1, sd2 = 0.1, spec = 1) {
       idx_range = (lower_idx + 1):(lower_idx + ds[j])
       temp = Exp_sphere(Z[,idx_range], mus[[j]]) # n by dj
       for (t in 1:n) {
-        X[t,idx_range] = Exp_sphere(perp_proj(temp[t,] + rnorm(ds[j], sd = sd2), temp[t,]), 
+        X[t,idx_range] = Exp_sphere(perp_proj(temp[t,] + runif(ds[j], min = -b2, max = b2), 
+                                              temp[t,]), 
                                     temp[t,])
       }
     }
@@ -154,7 +156,7 @@ dta_gen = function (n, ds, r, sd1 = 0.1, sd2 = 0.1, spec = 1) {
   return (list("X" = X, "A_tilde" = A_tilde, "A" = A, "Fs" = Fs, "Z" = Z, "mus" = mus))
 }
 
-mean_on_sphere = function (x, tau = 0.2, tol = 1e-4, max.iter = 1000) {
+mean_on_sphere = function (x, tau = 0.05, tol = 1e-8, max.iter = 1000) {
   # x: (n by d) matrix of data
   # tau: stepsize
   # estimate intrinsic mean on the sphere
@@ -164,6 +166,7 @@ mean_on_sphere = function (x, tau = 0.2, tol = 1e-4, max.iter = 1000) {
     grad = -colMeans(Log_sphere(x, mu))
     mu_new = Exp_sphere(tau * grad, mu)
     
+    cat(mu_new, "\n")
     if (norm(mu_new - mu, "2") < tol) {
       mu = mu_new
       break
@@ -195,20 +198,71 @@ simulation = function (n, ds, r, sd1, sd2, spec) {
   m = length(ds)
   mu_hat = vector("list", length = m)
   trans_x = matrix(NA, nrow = n, ncol = sum(ds))
+  trans_x_oracle = matrix(NA, nrow = n, ncol = sum(ds))
   for (j in 1:m) {
     lower_idx = ifelse(j == 1, 0, sum(ds[1:(j - 1)]))
     idx_range = (lower_idx + 1):(lower_idx + ds[j])
     mu_hat[[j]] = mean_on_sphere(dta$X[,idx_range])
     trans_x[,idx_range] = Log_sphere(dta$X[,idx_range], mu_hat[[j]])
+    trans_x_oracle[,idx_range] = Log_sphere(dta$X[,idx_range], dta$mus[[j]])
   }
   
-  model = LYB_fm(trans_x, r, floor(sum(ds)^(1/3)))
+  # Quality of mu estimate
+  mu_loss = rep(NA, m)
+  for (j in 1:m) {
+    mu_loss[j] = norm(mu_hat[[j]] - dta$mu[[j]], "2") # acos(c(mu_hat[[j]] %*% dta$mu[[j]]))
+  }
   
-  return (subspace_loss(model$V, dta$A_tilde))
+  # joint modeling
+  model = LYB_fm(trans_x, r, floor(sum(ds)^(1/3)))
+  loss1 = subspace_loss(model$V, dta$A_tilde)
+  RSS1 = (norm(trans_x_oracle - model$fitted.val, "2")^2) / n
+  
+  # separate modeling
+  RSS2 = 0
+  for (j in 1:m) {
+    lower_idx = ifelse(j == 1, 0, sum(ds[1:(j - 1)]))
+    idx_range = (lower_idx + 1):(lower_idx + ds[j])
+    model = LYB_fm(trans_x[,idx_range], r, floor(sum(ds)^(1/3)))
+    RSS2 = RSS2 + (norm(trans_x_oracle[,idx_range] - model$fitted.val, "2")^2) / n
+  }
+  
+  return (list("subspace_loss" = loss1, "RSS1" = RSS1, "RSS2" = RSS2,
+               "mu_loss" = mu_loss, "dta" = dta, "mu_hat" = mu_hat))
 }
 
+# Simulation
+max.sim = 100
+n = 300
+ds = c(3)
+r = 3
+snr = 0.8
+sd1 = 5 * snr * pi / (20 * r * sqrt(max(ds)))
+sd2 = 0.001 * (1 - snr) * pi / (20 * r * sqrt(max(ds)))
+spec = 1
 
+A_loss = rep(0, max.sim)
+RSS1 = rep(0, max.sim)
+RSS2 = rep(0, max.sim)
+mu_loss = rep(0, max.sim)
 
+for (sim in 1:max.sim) {
+  res = simulation(n, ds, r, sd1, sd2, spec)
+  
+  A_loss[sim] = res$subspace_loss
+  RSS1[sim] = res$RSS1
+  RSS2[sim] = res$RSS2
+  mu_loss[sim] = mean(res$mu_loss)
+  
+  cat("iteration", sim, "\n")
+}
+
+mean(A_loss); sd(A_loss)
+mean(RSS1); sd(RSS1)
+mean(RSS2); sd(RSS2)
+mean(mu_loss); sd(mu_loss)
+
+hist(mu_loss, breaks = 30)
 
 
 
@@ -222,3 +276,5 @@ simulation = function (n, ds, r, sd1, sd2, spec) {
 
 
  
+
+
