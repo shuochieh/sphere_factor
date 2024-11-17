@@ -302,93 +302,143 @@ subspace_loss = function (A_hat , A) {
   return (sqrt(temp))
 }
 
-simulation = function (n, ds, r, sd1, sd2, spec, mu_tol = 1e-3) {
-  dta = dta_gen (n, ds, r, sd1, sd2, spec)
+parallel_transport = function (a, x1, x2) {
+  # a: a d-dimensional vector or a (d by r) matrix
+  # x1, x2: d-dimensional unit vectors
+  # parallel transport a from the tangent space of x1 to x2
   
+  d = length(x1)
+  theta = acos(t(x1) %*% x2)[1]
+  e1 = x1
+  temp = svd(cbind(x1, x2), nu = d, nv = d)$u[,-c(1,2)]
+  
+  H = qr(cbind(e1, temp))
+  Q = qr.Q(H)
+  en = x2 - Q %*% t(Q) %*% x2
+  en = c(en / norm(en, "2"))
+  
+  R = diag(1, d) + sin(theta) * (outer(en, e1) - outer(e1, en)) + (cos(theta) - 1) * (outer(e1, e1) + outer(en, en))
+  
+  if (is.vector(a)) {
+    res = R %*% a
+    return (c(res))
+  } else {
+    return (R %*% a)
+  }
+}
+
+simulation = function (n, ds, r, b1, b2, spec, h = 5, mu_tol = 1e-3) {
+  dta = dta_gen(n, ds, r, b1, b2, spec)
+  X_train = dta$X
+  
+  temp = dta_gen(n, ds, r, b1, b2, spec)
+  X_test = temp$X
+
   m = length(ds)
   mu_hat = vector("list", length = m)
   trans_x = matrix(NA, nrow = n, ncol = sum(ds))
-  trans_x_oracle = matrix(NA, nrow = n, ncol = sum(ds))
   for (j in 1:m) {
     lower_idx = ifelse(j == 1, 0, sum(ds[1:(j - 1)]))
     idx_range = (lower_idx + 1):(lower_idx + ds[j])
-    mu_hat[[j]] = mean_on_sphere(dta$X[,idx_range], tol = mu_tol)
-    trans_x[,idx_range] = Log_sphere(dta$X[,idx_range], mu_hat[[j]])
-    trans_x_oracle[,idx_range] = Log_sphere(dta$X[,idx_range], dta$mus[[j]])
+    mu_hat[[j]] = mean_on_sphere(X_train[,idx_range], tol = mu_tol)
+    trans_x[,idx_range] = Log_sphere(X_train[,idx_range], mu_hat[[j]])
   }
   
   # Quality of mu estimate
   mu_loss = rep(NA, m)
   for (j in 1:m) {
-    mu_loss[j] = norm(mu_hat[[j]] - dta$mu[[j]], "2") # acos(c(mu_hat[[j]] %*% dta$mu[[j]]))
+    mu_loss[j] = acos(c(mu_hat[[j]] %*% dta$mu[[j]]))
   }
   
   # joint modeling
-  model = LYB_fm(trans_x, r, floor(sum(ds)^(1/3)))
-  loss1 = subspace_loss(model$V, dta$A_tilde)
-  RSS1 = (norm(trans_x_oracle - model$fitted.val, "2")^2) / n
-  
-  # separate modeling
-  RSS2 = 0
+  model = LYB_fm(trans_x, r, h)
+  loading_est = model$V
+  loading_est_transport = matrix(NA, ncol = ncol(model$V), nrow = nrow(model$V))
+  dist_space_each_joint = rep(NA, m)
   for (j in 1:m) {
     lower_idx = ifelse(j == 1, 0, sum(ds[1:(j - 1)]))
     idx_range = (lower_idx + 1):(lower_idx + ds[j])
-    model = LYB_fm(trans_x[,idx_range], r, floor(sum(ds)^(1/3)))
-    RSS2 = RSS2 + (norm(trans_x_oracle[,idx_range] - model$fitted.val, "2")^2) / n
+    temp = parallel_transport(loading_est[idx_range,], mu_hat[[j]], dta$mu[[j]])
+    loading_est_transport[idx_range,] = temp
+
+    dist_space_each_joint[j] = subspace_loss(temp, dta$A_tilde[idx_range,])
   }
   
-  return (list("subspace_loss" = loss1, "RSS1" = RSS1, "RSS2" = RSS2,
-               "mu_loss" = mu_loss, "dta" = dta, "mu_hat" = mu_hat))
+  dist_space_joint = subspace_loss(loading_est_transport, dta$A_tilde)
+
+  x_pred_oos = X_test %*% loading_est %*% t(loading_est)
+  for (j in 1:m) {
+    lower_idx = ifelse(j == 1, 0, sum(ds[1:(j - 1)]))
+    idx_range = (lower_idx + 1):(lower_idx + ds[j])
+    x_pred_oos[,idx_range] = Exp_sphere(x_pred_oos[,idx_range], mu_hat[[j]])
+  }
+  
+  pred_error_joint = norm(X_test - x_pred_oos, "F") / n
+
+  # separate modeling
+  dist_space_each_separate = rep(NA, m)
+  x_pred_oos = matrix(NA, nrow = n, ncol = sum(ds))
+  for (j in 1:m) {
+    lower_idx = ifelse(j == 1, 0, sum(ds[1:(j - 1)]))
+    idx_range = (lower_idx + 1):(lower_idx + ds[j])
+    model = LYB_fm(trans_x[,idx_range], r, h)
+    temp = parallel_transport(model$V, mu_hat[[j]], dta$mu[[j]])
+    
+    dist_space_each_separate[j] = subspace_loss(temp, dta$A_tilde[idx_range,])
+    temp = X_test[,idx_range] %*% model$V %*% t(model$V) 
+    x_pred_oos[,idx_range] = Exp_sphere(temp, mu_hat[[j]])
+  }
+  
+  pred_error_separate = norm(X_test - x_pred_oos, "F") / n
+
+  
+  return (list("mu_loss" = mu_loss, "D_joint" = dist_space_joint,
+               "D_each_joint" = dist_space_each_joint,
+               "D_each_separate" = dist_space_each_separate,
+               "pred_err_joint" = pred_error_joint,
+               "pred_err_separate" = pred_error_separate))
 }
 
 # Simulation
 max.sim = 500
-n = 600
-ds = rep(10, 5)
+n = 100
+m = 5
+ds = rep(5, m)
 r = 3
 snr = 0.6
-b1 = 0.5 * snr * pi / (20 * r * sqrt(max(ds)))
-b2 = 0.5 * (1 - snr) * pi / (20 * r * sqrt(max(ds)))
+b1 = 0.8 * snr * pi / (20 * r * sqrt(max(ds)))
+b2 = 0.8 * (1 - snr) * pi / (20 * r * sqrt(max(ds)))
 spec = 3
 
-A_loss = rep(0, max.sim)
-RSS1 = rep(0, max.sim)
-RSS2 = rep(0, max.sim)
-mu_loss = rep(0, max.sim)
+dist_loss = rep(0, max.sim)
+sub_loss_J = matrix(0, nrow = max.sim, ncol = m)
+sub_loss_S = matrix(0, nrow = max.sim, ncol = m)
+PE_J = rep(0, max.sim)
+PE_S = rep(0, max.sim)
 
 for (sim in 1:max.sim) {
-  res = simulation(n, ds, r, b1, b2, spec)
+  res = simulation(n, ds, r, b1, b2, spec, mu_tol = 1e-4)
   
-  A_loss[sim] = res$subspace_loss
-  RSS1[sim] = sqrt(res$RSS1)
-  RSS2[sim] = sqrt(res$RSS2)
-  mu_loss[sim] = mean(res$mu_loss)
+  dist_loss[sim] = res$D_joint
+  sub_loss_J[sim,] = res$D_each_joint
+  sub_loss_S[sim,] = res$D_each_separate
+  PE_J[sim] = res$pred_err_joint
+  PE_S[sim] = res$pred_err_separate
   
-  # cat("iteration", sim, "\n")
+  if (sim > 1 && sim %% 100 == 0) {
+    cat("iteration", sim, "\n")
+  }
 }
 
-mean(A_loss); sd(A_loss)
-# mean(RSS1); sd(RSS1)
-# mean(RSS2); sd(RSS2)
-mean(RSS1 / RSS2); sd(RSS1 / RSS2)
+mean(dist_loss); sd(dist_loss)
+mean(PE_J); sd(PE_J)
+mean(PE_S); sd(PE_S)
 
-mean(mu_loss); sd(mu_loss)
-
-
+colMeans(sub_loss_J)
+colMeans(sub_loss_S)
 
 
 
 
-
-
-
-
-
-
-
-
-
-
- 
 
 
