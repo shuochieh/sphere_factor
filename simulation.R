@@ -96,170 +96,78 @@ perp_proj = function (x, mu) {
 
 dta_gen = function (n, ds, r, b1 = 0.1, b2 = 0.1, spec = 1) {
   # n: sample size
-  # ds: a vector of the dimensions of the ambient Euclidean spaces for each spherical
-  #     component
-  # r: number of (true) factors
+  # ds: a vector of the dimensions of the ambient Euclidean spaces for each 
+  #     spherical component
+  # r: number of true factors
+  # spec: 1. strong factors
+  #       2. weak factors (all loaded)
   # Generate synthetic data
   
+  m = length(ds)
+  
+  # generate reference points
+  mus = vector("list", length = m)
+  for (i in 1:m) {
+    temp = rnorm(ds[i])
+    mus[[i]] = temp / norm(temp, type = "2")
+  }
+  
+  # generate latent factor processes
+  if (spec %in% c(1:3)) {
+    Fs = matrix(0, nrow = r, ncol = n + 100)
+    for (t in 2:(n + 100)) {
+      Fs[,t] = 0.8 * Fs[,t - 1] + runif(r, min = -b1, max = b1)
+    }
+    Fs = Fs[,-c(1:100)] # r by n
+  }
+  
+  # generate factor loadings
   if (spec == 1) {
-    m = length(ds)
-    
-    # generate reference points
-    mus = vector("list", length = m)
-    for (i in 1:m) {
-      temp = rnorm(ds[i])
-      mus[[i]] = temp / norm(temp, type = "2")
+    A = matrix(runif((sum(ds) - m) * r, min = -2, max = 2), 
+               nrow = sum(ds) - m, ncol = r)
+  } else if (spec == 2) {
+    A = matrix(runif((sum(ds) - m) * r, min = -0.5, max = 0.5), 
+               nrow = sum(ds) - m, ncol = r)
+  } else if (spec == 3) {
+    A = matrix(runif((sum(ds) - m) * r, min = -0.1, max = 0.1), 
+               nrow = sum(ds) - m, ncol = r)
+  }
+  # A is (d1 + d2 + ... + dm - m) by r
+  
+  # generate latent observations (embeded in the ambient space)
+  Z = matrix(NA, nrow = n, ncol = sum(ds))
+  Vs = vector("list", length = m)
+  for (j in 1:m) {
+    Vs[[j]] = svd(mus[[j]], nu = ds[j], nv = ds[j])$u[,-1] # Coordinate system
+  }
+  V = bdiag(Vs) # (d1 + ... + dm) by (d1 + ... + dm - m)
+  
+  A_tilde = as.matrix(V %*% A) # (d1 + ... + dm) by r
+  for (t in 1:n) {
+    Z[t,] = A_tilde %*% c(Fs[,t])
+  }
+  
+  # generate observations
+  X = matrix(NA, nrow = n, ncol = sum(ds))
+  X_noiseless = matrix(NA, nrow = n, ncol = sum(ds))
+  for (j in 1:m) {
+    if (j == 1) {
+      lower_idx = 0
+    } else {
+      lower_idx = sum(ds[1:(j - 1)])
     }
-    
-    # generate latent factor processes
-    Fs = matrix(0, nrow = r, ncol = n + 100)
-    for (t in 2:(n + 100)) {
-      Fs[,t] = 0.9 * Fs[,t - 1] + runif(r, min = -b1, max = b1)
-    }
-    Fs = Fs[,-c(1:100)] # r by n
-    
-    # generate factor loadings
-    A = matrix(runif((sum(ds) - m) * r, min = -2, max = 2), nrow = sum(ds) - m, ncol = r)
-    # A is (d1 + d2 + ... + dm - m) by r
-    
-    # generate latent observations (embeded in the ambient space)
-    Z = matrix(NA, nrow = n, ncol = sum(ds))
-    Vs = vector("list", length = m)
-    for (j in 1:m) {
-      Vs[[j]] = svd(mus[[j]], nu = ds[j], nv = ds[j])$u[,-1] # Coordinate system
-    }
-    V = bdiag(Vs) # (d1 + ... + dm) by (d1 + ... + dm - m)
-    
-    A_tilde = as.matrix(V %*% A) # (d1 + ... + dm) by r
+    idx_range = (lower_idx + 1):(lower_idx + ds[j])
+    X_noiseless[,idx_range] = Exp_sphere(t(mus[[j]] + t(Z[,idx_range])), mus[[j]]) # n by dj
+    temp = X_noiseless[,idx_range]
     for (t in 1:n) {
-      Z[t,] = A_tilde %*% c(Fs[,t])
-    }
-    
-    # generate observations
-    X = matrix(NA, nrow = n, ncol = sum(ds))
-    for (j in 1:m) {
-      if (j == 1) {
-        lower_idx = 0
-      } else {
-        lower_idx = sum(ds[1:(j - 1)])
-      }
-      idx_range = (lower_idx + 1):(lower_idx + ds[j])
-      temp = Exp_sphere(t(mus[[j]] + t(Z[,idx_range])), mus[[j]]) # n by dj
-      for (t in 1:n) {
-        X[t,idx_range] = Exp_sphere(perp_proj(temp[t,] + runif(ds[j], min = -b2, max = b2), 
-                                              temp[t,]), 
-                                    temp[t,])
-      }
+      X[t,idx_range] = Exp_sphere(perp_proj(temp[t,] + runif(ds[j], min = -b2, max = b2), 
+                                            temp[t,]), 
+                                  temp[t,])
     }
   }
   
-  if (spec == 2) {
-    m = length(ds)
-    
-    # generate reference points
-    mus = vector("list", length = m)
-    for (i in 1:m) {
-      temp = rnorm(ds[i])
-      mus[[i]] = temp / norm(temp, type = "2")
-    }
-    
-    # generate latent factor processes
-    Fs = matrix(0, nrow = r, ncol = n + 100)
-    for (t in 2:(n + 100)) {
-      Fs[,t] = 0.9 * Fs[,t - 1] + runif(r, min = -b1, max = b1)
-    }
-    Fs = Fs[,-c(1:100)] # r by n
-    
-    # generate factor loadings
-    A = matrix(runif((sum(ds) - m) * r, min = -2, max = 2), nrow = sum(ds) - m, ncol = r)
-    A[sample(sum(ds) - m, floor(0.3 * (sum(ds) - m))),] = 0
-    # A is (d1 + d2 + ... + dm - m) by r
-    
-    # generate latent observations (embeded in the ambient space)
-    Z = matrix(NA, nrow = n, ncol = sum(ds))
-    Vs = vector("list", length = m)
-    for (j in 1:m) {
-      Vs[[j]] = svd(mus[[j]], nu = ds[j], nv = ds[j])$u[,-1] # Coordinate system
-    }
-    V = bdiag(Vs) # (d1 + ... + dm) by (d1 + ... + dm - m)
-    
-    A_tilde = as.matrix(V %*% A) # (d1 + ... + dm) by r
-    for (t in 1:n) {
-      Z[t,] = A_tilde %*% c(Fs[,t])
-    }
-    
-    # generate observations
-    X = matrix(NA, nrow = n, ncol = sum(ds))
-    for (j in 1:m) {
-      if (j == 1) {
-        lower_idx = 0
-      } else {
-        lower_idx = sum(ds[1:(j - 1)])
-      }
-      idx_range = (lower_idx + 1):(lower_idx + ds[j])
-      temp = Exp_sphere(t(mus[[j]] + t(Z[,idx_range])), mus[[j]]) # n by dj
-      for (t in 1:n) {
-        X[t,idx_range] = Exp_sphere(perp_proj(temp[t,] + runif(ds[j], min = -b2, max = b2), 
-                                              temp[t,]), 
-                                    temp[t,])
-      }
-    }
-  }
-  
-  if (spec == 3) {
-    m = length(ds)
-    
-    # generate reference points
-    mus = vector("list", length = m)
-    for (i in 1:m) {
-      temp = rnorm(ds[i])
-      mus[[i]] = temp / norm(temp, type = "2")
-    }
-    
-    # generate latent factor processes
-    Fs = matrix(0, nrow = r, ncol = n + 100)
-    for (t in 2:(n + 100)) {
-      Fs[,t] = 0.9 * Fs[,t - 1] + runif(r, min = -b1, max = b1)
-    }
-    Fs = Fs[,-c(1:100)] # r by n
-    
-    # generate factor loadings
-    A = matrix(runif((sum(ds) - m) * r, min = -0.5, max = 0.5), nrow = sum(ds) - m, ncol = r)
-    # A is (d1 + d2 + ... + dm - m) by r
-    
-    # generate latent observations (embeded in the ambient space)
-    Z = matrix(NA, nrow = n, ncol = sum(ds))
-    Vs = vector("list", length = m)
-    for (j in 1:m) {
-      Vs[[j]] = svd(mus[[j]], nu = ds[j], nv = ds[j])$u[,-1] # Coordinate system
-    }
-    V = bdiag(Vs) # (d1 + ... + dm) by (d1 + ... + dm - m)
-    
-    A_tilde = as.matrix(V %*% A) # (d1 + ... + dm) by r
-    for (t in 1:n) {
-      Z[t,] = A_tilde %*% c(Fs[,t])
-    }
-    
-    # generate observations
-    X = matrix(NA, nrow = n, ncol = sum(ds))
-    for (j in 1:m) {
-      if (j == 1) {
-        lower_idx = 0
-      } else {
-        lower_idx = sum(ds[1:(j - 1)])
-      }
-      idx_range = (lower_idx + 1):(lower_idx + ds[j])
-      temp = Exp_sphere(t(mus[[j]] + t(Z[,idx_range])), mus[[j]]) # n by dj
-      for (t in 1:n) {
-        X[t,idx_range] = Exp_sphere(perp_proj(temp[t,] + runif(ds[j], min = -b2, max = b2), 
-                                              temp[t,]), 
-                                    temp[t,])
-      }
-    }
-  }
-  
-  
-  return (list("X" = X, "A_tilde" = A_tilde, "A" = A, "Fs" = Fs, "Z" = Z, "mus" = mus, "Vs" = Vs))
+  return (list("X" = X, "A_tilde" = A_tilde, "X_nless" = X_noiseless, "Fs" = Fs,
+               "Z" = Z, "mus" = mus))
 }
 
 mean_on_sphere = function (x, tau = 0.1, tol = 1e-8, max.iter = 1000, verbose = FALSE) {
@@ -298,6 +206,7 @@ subspace_loss = function (A_hat , A) {
   }
   q = ncol(Q1)
   temp = 1 - (1 / q) * sum(diag(Q1 %*% t(Q1) %*% Q2 %*% t(Q2)))
+  temp = max(temp, 0) # avoid numerical issues
   
   return (sqrt(temp))
 }
@@ -327,13 +236,25 @@ parallel_transport = function (a, x1, x2) {
   }
 }
 
-simulation = function (n, ds, r, b1, b2, spec, h = 5, mu_tol = 1e-3) {
-  dta = dta_gen(n, ds, r, b1, b2, spec)
-  X_train = dta$X
+oos_eval = function (x, A_hat, mu_hat, noiseless_x) {
+  # x: n by p observation matrix
+  # A_hat: p by r loading matrix
+  # noiseless_x: n by p target to compare against
+  z = Log_sphere(x, mu_hat)
+  z_hat = z %*% A_hat %*% t(A_hat)
+  x_hat = Exp_sphere(z_hat, mu_hat)
   
-  temp = dta_gen(n, ds, r, b1, b2, spec)
-  X_test = temp$X
+  res = acos(c(diag(noiseless_x %*% t(x_hat))))
+  
+  return (sum(res))
+}
 
+simulation = function (n, ds, r, b1, b2, spec, h = 5, mu_tol = 1e-3) {
+  dta = dta_gen(2 * n, ds, r, b1, b2, spec)
+  X_train = dta$X[1:n,]
+  X_test = dta$X[-c(1:n),]
+  X_nless = dta$X_nless[-c(1:n),]
+  
   m = length(ds)
   mu_hat = vector("list", length = m)
   trans_x = matrix(NA, nrow = n, ncol = sum(ds))
@@ -366,54 +287,83 @@ simulation = function (n, ds, r, b1, b2, spec, h = 5, mu_tol = 1e-3) {
   
   dist_space_joint = subspace_loss(loading_est_transport, dta$A_tilde)
 
-  x_pred_oos = X_test %*% loading_est %*% t(loading_est)
+  x_temp = matrix(NA, nrow = n, ncol = ncol(X_test))
+  x_temp_oracle = matrix(NA, nrow = n, ncol = ncol(X_test))
   for (j in 1:m) {
     lower_idx = ifelse(j == 1, 0, sum(ds[1:(j - 1)]))
     idx_range = (lower_idx + 1):(lower_idx + ds[j])
-    x_pred_oos[,idx_range] = Exp_sphere(x_pred_oos[,idx_range], mu_hat[[j]])
+    x_temp[,idx_range] = Log_sphere(X_test[,idx_range], mu_hat[[j]])
+    x_temp_oracle[,idx_range] = Log_sphere(X_test[,idx_range], dta$mus[[j]])
   }
+  z_hat = x_temp %*% loading_est %*% t(loading_est)
+  temp = qr(dta$A_tilde)
+  AR_oracle = qr.Q(temp)
+  z_hat_oracle = x_temp_oracle %*% AR_oracle %*% t(AR_oracle)
   
-  pred_error_joint = norm(X_test - x_pred_oos, "F") / n
-
+  pred_error_joint = 0
+  pred_error_oracle = 0
+  for (j in 1:m) {
+    lower_idx = ifelse(j == 1, 0, sum(ds[1:(j - 1)]))
+    idx_range = (lower_idx + 1):(lower_idx + ds[j])
+    temp = Exp_sphere(z_hat[,idx_range], mu_hat[[j]])
+    pred_error_joint = pred_error_joint + 
+      sum(acos(c(diag(X_nless[,idx_range] %*% t(temp)))))
+    temp = Exp_sphere(z_hat_oracle[,idx_range], dta$mus[[j]])
+    pred_error_oracle = pred_error_oracle + 
+      sum(acos(c(diag(X_nless[,idx_range] %*% t(temp)))))
+  }
+  pred_error_joint = pred_error_joint / (n * m)
+  pred_error_oracle = pred_error_oracle / (n * m)
+  
   # separate modeling
   dist_space_each_separate = rep(NA, m)
   x_pred_oos = matrix(NA, nrow = n, ncol = sum(ds))
+  pred_error_separate = 0
   for (j in 1:m) {
     lower_idx = ifelse(j == 1, 0, sum(ds[1:(j - 1)]))
     idx_range = (lower_idx + 1):(lower_idx + ds[j])
     model = LYB_fm(trans_x[,idx_range], r, h)
     temp = parallel_transport(model$V, mu_hat[[j]], dta$mu[[j]])
-    
     dist_space_each_separate[j] = subspace_loss(temp, dta$A_tilde[idx_range,])
-    temp = X_test[,idx_range] %*% model$V %*% t(model$V) 
-    x_pred_oos[,idx_range] = Exp_sphere(temp, mu_hat[[j]])
+    
+    pred_error_separate = pred_error_separate +
+      oos_eval(X_test[,idx_range], model$V, mu_hat[[j]], X_nless[,idx_range])
   }
   
-  pred_error_separate = norm(X_test - x_pred_oos, "F") / n
+  pred_error_separate = pred_error_separate / (n * m)
 
   
   return (list("mu_loss" = mu_loss, "D_joint" = dist_space_joint,
                "D_each_joint" = dist_space_each_joint,
                "D_each_separate" = dist_space_each_separate,
                "pred_err_joint" = pred_error_joint,
-               "pred_err_separate" = pred_error_separate))
+               "pred_err_separate" = pred_error_separate,
+               "pred_err_oracle" = pred_error_oracle))
 }
 
 # Simulation
-max.sim = 500
-n = 100
+max.sim = 1000
+n = 300
 m = 5
 ds = rep(5, m)
 r = 3
-snr = 0.6
-b1 = 0.8 * snr * pi / (20 * r * sqrt(max(ds)))
-b2 = 0.8 * (1 - snr) * pi / (20 * r * sqrt(max(ds)))
-spec = 3
+snr = 0.7
+spec = 1
+if (spec == 1) {
+  A = 2
+} else if (spec == 2) {
+  A = 0.5
+} else if (spec == 3) {
+  A = 0.1
+}
+b1 = snr * (1 - 0.8) * pi / (A * r)
+b2 = (1 - snr) * (1 - 0.8) * pi / (A * r)
 
 dist_loss = rep(0, max.sim)
 sub_loss_J = matrix(0, nrow = max.sim, ncol = m)
 sub_loss_S = matrix(0, nrow = max.sim, ncol = m)
 PE_J = rep(0, max.sim)
+PE_O = rep(0, max.sim)
 PE_S = rep(0, max.sim)
 
 for (sim in 1:max.sim) {
@@ -424,6 +374,7 @@ for (sim in 1:max.sim) {
   sub_loss_S[sim,] = res$D_each_separate
   PE_J[sim] = res$pred_err_joint
   PE_S[sim] = res$pred_err_separate
+  PE_O[sim] = res$pred_err_oracle
   
   if (sim > 1 && sim %% 100 == 0) {
     cat("iteration", sim, "\n")
@@ -433,9 +384,10 @@ for (sim in 1:max.sim) {
 mean(dist_loss); sd(dist_loss)
 mean(PE_J); sd(PE_J)
 mean(PE_S); sd(PE_S)
+mean(PE_O); sd(PE_O)
 
-colMeans(sub_loss_J)
-colMeans(sub_loss_S)
+colMeans(sub_loss_J); apply(sub_loss_J, 2, sd)
+colMeans(sub_loss_S); apply(sub_loss_S, 2, sd)
 
 
 
