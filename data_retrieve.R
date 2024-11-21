@@ -9,7 +9,6 @@ states = c("AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID
 industries = c("NRMNN", "CONSN", "MFGN", 
                "TRADN", "INFON", "FIREN", "PBSVN", "EDUHN", "LEIHN", "SRVON")
 
-Sys.sleep(30)
 for (industry in industries) {
   for (state in states) {
     series_id = paste0(state, industry)
