@@ -1,7 +1,6 @@
 library("httr")
 library("jsonlite")
 
-api_key = "57f6a31436a3039bdd7e1b23106506d9" # remember to remove
 
 states = c("AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", 
            "IL", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", 
