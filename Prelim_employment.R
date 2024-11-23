@@ -66,19 +66,49 @@ for (j in 1:length(states)) {
     pivot_longer(cols = -Date, names_to = "Variable", values_to = "Value")
   
   # Create the plot
-  plots[[j]] = ggplot(long_data, aes(x = Date, y = Value, color = Variable)) +
-    geom_line(size = 0.5) + 
-    scale_x_date(
-      date_breaks = "5 years", 
-      date_labels = "%Y"      
-    ) +
-    labs(
-      title = paste0(states[j], " Compositions"),
-      x = "Year",
-      y = "Composition",
-      color = "Sector"
-    ) +
-    theme_minimal() #+ 
+  if (j == 1) {
+    plots[[j]] = ggplot(long_data, aes(x = Date, y = Value, color = Variable)) +
+      geom_line(size = 0.5) + 
+      scale_x_date(
+        date_breaks = "5 years", 
+        date_labels = "%y"      
+      ) +
+      labs(
+        title = paste0(states[j], " Compositions"),
+        x = "Year",
+        y = "Composition",
+        color = "Sector"
+      ) +
+      theme_minimal()
+  } else {
+    plots[[j]] = ggplot(long_data, aes(x = Date, y = Value, color = Variable)) +
+      geom_line(size = 0.5) + 
+      scale_x_date(
+        date_breaks = "5 years", 
+        date_labels = "%y"      
+      ) +
+      labs(
+        title = paste0(states[j], " Compositions"),
+        x = "Year",
+        y = "Composition",
+        color = "Sector"
+      ) +
+    theme_minimal() +
+    theme(legend.position = "none")        
+  }
+  # plots[[j]] = ggplot(long_data, aes(x = Date, y = Value, color = Variable)) +
+  #   geom_line(size = 0.5) + 
+  #   scale_x_date(
+  #     date_breaks = "5 years", 
+  #     date_labels = "%Y"      
+  #   ) +
+  #   labs(
+  #     title = paste0(states[j], " Compositions"),
+  #     x = "Year",
+  #     y = "Composition",
+  #     color = "Sector"
+  #   ) #+
+    #theme_minimal() #+ 
     #theme(legend.position = "none") #+        
     #theme(
     #  text = element_text(size = 14),  
@@ -87,13 +117,8 @@ for (j in 1:length(states)) {
 }
 
 for (i in 1:5) {
-  grid.arrange(grobs = plots[((i - 1) * 1 + 1):(i * 1)], ncol = 1, nrow = 1)
+  grid.arrange(grobs = plots[((i - 1) * 10 + 1):(i * 10)], ncol = 2, nrow = 5)
 }
-
-# for (i in 1:(floor(length(plots) / 4) + 1)) {
-#   grid.arrange(grobs = plots[((i - 1) * 4 + 1):(i * 4)], ncol = 2, nrow = 2)
-# }
-
 
 
 # Prelim analysis: by sectors
@@ -116,6 +141,60 @@ for (j in 1:length(industries)) {
     pivot_longer(cols = -Date, names_to = "Variable", values_to = "Value")
   
   # Create the plot
+  if (j == 1) {
+    plots[[j]] = ggplot(long_data, aes(x = Date, y = Value, color = Variable)) +
+      geom_line(size = 0.5) + 
+      scale_x_date(
+        date_breaks = "5 years", 
+        date_labels = "%Y"      
+      ) +
+      labs(
+        title = paste0(industries[j], " Compositions"),
+        x = "Year",
+        y = "Composition",
+        color = "Sector"
+      ) +
+      theme_minimal() 
+  } else {
+    plots[[j]] = ggplot(long_data, aes(x = Date, y = Value, color = Variable)) +
+      geom_line(size = 0.5) + 
+      scale_x_date(
+        date_breaks = "5 years", 
+        date_labels = "%Y"      
+      ) +
+      labs(
+        title = paste0(industries[j], " Compositions"),
+        x = "Year",
+        y = "Composition",
+        color = "Sector"
+      ) +
+      theme_minimal() + 
+      theme(legend.position = "none")
+  }
+}
+
+for (i in 1:7) {
+  grid.arrange(grobs = plots[((i - 1) * 1 + 1):(i * 1)], ncol = 1, nrow = 1)
+}
+
+# Trimmed time plots
+
+plots = vector("list", length(industries))
+for (j in 1:length(industries)) {
+  temp = res[,,j]
+  colnames(temp) = states
+  
+  state_idx = which(temp[1,] > sort(temp[1,], decreasing = T)[6])
+  
+  ts_temp = data.frame(
+    Date = seq(as.Date("1990-01-01"), as.Date("2024-10-01"), by = "month"),
+    as.data.frame(temp[,state_idx])
+  )
+  
+  long_data <- ts_temp %>%
+    pivot_longer(cols = -Date, names_to = "Variable", values_to = "Value")
+  
+  # Create the plot
   plots[[j]] = ggplot(long_data, aes(x = Date, y = Value, color = Variable)) +
     geom_line(size = 0.5) + 
     scale_x_date(
@@ -128,15 +207,10 @@ for (j in 1:length(industries)) {
       y = "Composition",
       color = "Sector"
     ) +
-    theme_minimal() #+ 
-  #theme(legend.position = "none") #+        
-  #theme(
-  #  text = element_text(size = 14),  
-  #  axis.text.x = element_text(angle = 45, hjust = 1) # Rotate x-axis labels for readability
-  #)
+    theme_minimal() 
 }
 
-for (i in 1:(floor(length(plots) / 1) + 1)) {
+for (i in 1:7) {
   grid.arrange(grobs = plots[((i - 1) * 1 + 1):(i * 1)], ncol = 1, nrow = 1)
 }
 
