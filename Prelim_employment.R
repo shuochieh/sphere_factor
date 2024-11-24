@@ -184,7 +184,7 @@ for (j in 1:length(industries)) {
   temp = res[,,j]
   colnames(temp) = states
   
-  state_idx = which(temp[1,] > sort(temp[1,], decreasing = T)[6])
+  state_idx = which(states %in% c("CA", "NY", "TX", "FL", "PA", "IL")) #which(temp[1,] > sort(temp[1,], decreasing = T)[6])
   
   ts_temp = data.frame(
     Date = seq(as.Date("1990-01-01"), as.Date("2024-10-01"), by = "month"),
@@ -205,7 +205,7 @@ for (j in 1:length(industries)) {
       title = paste0(industries[j], " Compositions"),
       x = "Year",
       y = "Composition",
-      color = "Sector"
+      color = ""
     ) +
     theme_minimal() 
 }
