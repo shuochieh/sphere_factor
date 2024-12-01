@@ -1,6 +1,7 @@
 ### Simulations for factor model for spherical time series
 
 library(Matrix)
+library(vMF)
 
 Exp_sphere = function (x, mu) {
   # x: an (m by d) matrix or a vector on the tangent space
@@ -94,13 +95,14 @@ perp_proj = function (x, mu) {
   return (res)
 }
 
-dta_gen = function (n, ds, r, b1 = 0.1, b2 = 0.1, spec = 1) {
+dta_gen = function (n, ds, r, lambda = 0.1, b2 = 0.1, spec = 1) {
   # n: sample size
   # ds: a vector of the dimensions of the ambient Euclidean spaces for each 
   #     spherical component
   # r: number of true factors
   # spec: 1. strong factors
   #       2. weak factors (all loaded)
+  # lambda: scaling of the latent variable (controls signal strength)
   # Generate synthetic data
   
   m = length(ds)
@@ -116,7 +118,7 @@ dta_gen = function (n, ds, r, b1 = 0.1, b2 = 0.1, spec = 1) {
   if (spec %in% c(1:3)) {
     Fs = matrix(0, nrow = r, ncol = n + 100)
     for (t in 2:(n + 100)) {
-      Fs[,t] = 0.8 * Fs[,t - 1] + runif(r, min = -b1, max = b1)
+      Fs[,t] = 0.8 * Fs[,t - 1] + rnorm(r)
     }
     Fs = Fs[,-c(1:100)] # r by n
   }
@@ -144,7 +146,7 @@ dta_gen = function (n, ds, r, b1 = 0.1, b2 = 0.1, spec = 1) {
   
   A_tilde = as.matrix(V %*% A) # (d1 + ... + dm) by r
   for (t in 1:n) {
-    Z[t,] = A_tilde %*% c(Fs[,t])
+    Z[t,] = lambda * A_tilde %*% c(Fs[,t])
   }
   
   # generate observations
@@ -160,9 +162,14 @@ dta_gen = function (n, ds, r, b1 = 0.1, b2 = 0.1, spec = 1) {
     X_noiseless[,idx_range] = Exp_sphere(t(mus[[j]] + t(Z[,idx_range])), mus[[j]]) # n by dj
     temp = X_noiseless[,idx_range]
     for (t in 1:n) {
-      X[t,idx_range] = Exp_sphere(perp_proj(temp[t,] + runif(ds[j], min = -b2, max = b2), 
-                                            temp[t,]), 
-                                  temp[t,])
+      X[t, idx_range] = rvMF(1, temp[t,])
+      ####
+      # Remember to adjust noise level
+      ####
+      
+      # X[t,idx_range] = Exp_sphere(perp_proj(temp[t,] + runif(ds[j], min = -b2, max = b2), 
+      #                                       temp[t,]), 
+      #                             temp[t,])
     }
   }
   
