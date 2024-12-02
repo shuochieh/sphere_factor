@@ -2,6 +2,7 @@
 
 library(Matrix)
 library(vMF)
+library(ggplot2)
 
 Exp_sphere = function (x, mu) {
   # x: an (m by d) matrix or a vector on the tangent space
@@ -95,13 +96,37 @@ perp_proj = function (x, mu) {
   return (res)
 }
 
-dta_gen = function (n, ds, r, lambda = 0.1, b2 = 0.1, spec = 1) {
+noise_inject = function (x, type = "uniform", b = NULL, kappa = NULL) {
+  # x: a unit-length vector
+  # b: parameter of uniform noise 
+  # type: {uniform, vMF} type of noise distribution
+  #       If vMF is used, intensity parameter kappa should be carefully supplied
+  # Inject noise around a vector x on the unit sphere
+  
+  d = length(x)
+  if (type == "uniform") {
+    if (is.null(b)) {
+      stop("noise_inject: b should be supplied when uniform distribution is used")
+    }
+    res = x + runif(d, -b, b)
+    res = Exp_sphere(perp_proj(res, x), x)
+  } else if (type == "vMF") {
+    if (is.null(kappa)) {
+      stop("noise_inject: kappa should be supplied when vMF distribution is used")
+    }
+    
+    res = rvMF(1, kappa * x)
+  }
+
+  return (res)
+}
+
+dta_gen = function (n, ds, r, lambda = 0.1, type = "uniform", b2 = NULL, 
+                    kappa = NULL, spec = 0) {
   # n: sample size
   # ds: a vector of the dimensions of the ambient Euclidean spaces for each 
   #     spherical component
   # r: number of true factors
-  # spec: 1. strong factors
-  #       2. weak factors (all loaded)
   # lambda: scaling of the latent variable (controls signal strength)
   # Generate synthetic data
   
@@ -115,24 +140,31 @@ dta_gen = function (n, ds, r, lambda = 0.1, b2 = 0.1, spec = 1) {
   }
   
   # generate latent factor processes
-  if (spec %in% c(1:3)) {
-    Fs = matrix(0, nrow = r, ncol = n + 100)
-    for (t in 2:(n + 100)) {
-      Fs[,t] = 0.8 * Fs[,t - 1] + rnorm(r)
-    }
-    Fs = Fs[,-c(1:100)] # r by n
+  Fs = matrix(0, nrow = r, ncol = n + 100)
+  for (t in 2:(n + 100)) {
+    Fs[,t] = 0.8 * Fs[,t - 1] + rnorm(r)
   }
+  Fs = Fs[,-c(1:100)] # r by n
   
   # generate factor loadings
-  if (spec == 1) {
+  if (spec == 0) {
+    # default setting
+    A = matrix(runif((sum(ds) - m) * r, min = -1, max = 1), 
+               nrow = sum(ds) - m, ncol = r)
+    EA2 = 1/3
+  }
+  else if (spec == 1) {
     A = matrix(runif((sum(ds) - m) * r, min = -2, max = 2), 
                nrow = sum(ds) - m, ncol = r)
+    EA2 = 4/3
   } else if (spec == 2) {
     A = matrix(runif((sum(ds) - m) * r, min = -0.5, max = 0.5), 
                nrow = sum(ds) - m, ncol = r)
+    EA2 = 1/12
   } else if (spec == 3) {
     A = matrix(runif((sum(ds) - m) * r, min = -0.1, max = 0.1), 
                nrow = sum(ds) - m, ncol = r)
+    EA2 = 1/300
   }
   # A is (d1 + d2 + ... + dm - m) by r
   
@@ -145,8 +177,10 @@ dta_gen = function (n, ds, r, lambda = 0.1, b2 = 0.1, spec = 1) {
   V = bdiag(Vs) # (d1 + ... + dm) by (d1 + ... + dm - m)
   
   A_tilde = as.matrix(V %*% A) # (d1 + ... + dm) by r
+  lambda_tilde = (1 - 0.8^2) / ((max(ds) - 1) * r * EA2)
+  lambda_tilde = sqrt(lambda_tilde * lambda)
   for (t in 1:n) {
-    Z[t,] = lambda * A_tilde %*% c(Fs[,t])
+    Z[t,] = lambda_tilde * A_tilde %*% c(Fs[,t])
   }
   
   # generate observations
@@ -159,17 +193,10 @@ dta_gen = function (n, ds, r, lambda = 0.1, b2 = 0.1, spec = 1) {
       lower_idx = sum(ds[1:(j - 1)])
     }
     idx_range = (lower_idx + 1):(lower_idx + ds[j])
-    X_noiseless[,idx_range] = Exp_sphere(t(mus[[j]] + t(Z[,idx_range])), mus[[j]]) # n by dj
+    X_noiseless[,idx_range] = Exp_sphere(Z[,idx_range], mus[[j]]) # n by dj
     temp = X_noiseless[,idx_range]
     for (t in 1:n) {
-      X[t, idx_range] = rvMF(1, temp[t,])
-      ####
-      # Remember to adjust noise level
-      ####
-      
-      # X[t,idx_range] = Exp_sphere(perp_proj(temp[t,] + runif(ds[j], min = -b2, max = b2), 
-      #                                       temp[t,]), 
-      #                             temp[t,])
+      X[t, idx_range] = noise_inject(temp[t,], type, b = b2, kappa = kappa)
     }
   }
   
@@ -256,8 +283,10 @@ oos_eval = function (x, A_hat, mu_hat, noiseless_x) {
   return (sum(res))
 }
 
-simulation = function (n, ds, r, b1, b2, spec, h = 5, mu_tol = 1e-3) {
-  dta = dta_gen(2 * n, ds, r, b1, b2, spec)
+# Simulation code remains to be fixed
+simulation = function (n, ds, r, lambda = 1, type = "vMF", kappa = NULL, b2 = NULL,
+                       h = 5, mu_tol = 1e-3) {
+  dta = dta_gen(2 * n, ds, r, lambda = lambda, type = type, b2 = b2, kappa = kappa)
   X_train = dta$X[1:n,]
   X_test = dta$X[-c(1:n),]
   X_nless = dta$X_nless[-c(1:n),]
@@ -280,6 +309,7 @@ simulation = function (n, ds, r, b1, b2, spec, h = 5, mu_tol = 1e-3) {
   
   # joint modeling
   model = LYB_fm(trans_x, r, h)
+  
   loading_est = model$V
   loading_est_transport = matrix(NA, ncol = ncol(model$V), nrow = nrow(model$V))
   dist_space_each_joint = rep(NA, m)
@@ -291,7 +321,6 @@ simulation = function (n, ds, r, b1, b2, spec, h = 5, mu_tol = 1e-3) {
 
     dist_space_each_joint[j] = subspace_loss(temp, dta$A_tilde[idx_range,])
   }
-  
   dist_space_joint = subspace_loss(loading_est_transport, dta$A_tilde)
 
   x_temp = matrix(NA, nrow = n, ncol = ncol(X_test))
@@ -304,6 +333,7 @@ simulation = function (n, ds, r, b1, b2, spec, h = 5, mu_tol = 1e-3) {
   }
   z_hat = x_temp %*% loading_est %*% t(loading_est)
   temp = qr(dta$A_tilde)
+  
   AR_oracle = qr.Q(temp)
   z_hat_oracle = x_temp_oracle %*% AR_oracle %*% t(AR_oracle)
   
@@ -339,32 +369,39 @@ simulation = function (n, ds, r, b1, b2, spec, h = 5, mu_tol = 1e-3) {
   
   pred_error_separate = pred_error_separate / (n * m)
 
+  total_signal_variations = 0
+  total_data_variations = 0
+  for (j in 1:m) {
+    lower_idx = ifelse(j == 1, 0, sum(ds[1:(j - 1)]))
+    idx_range = (lower_idx + 1):(lower_idx + ds[j])
+    
+    total_signal_variations = total_signal_variations + sum(acos(X_nless[,idx_range] %*% mu_hat[[j]]))
+    total_data_variations = total_data_variations + sum(acos(X_test[,idx_range] %*% mu_hat[[j]]))
+  }
+  
+  total_signal_variations = total_signal_variations / (n * m)
+  total_data_variations = total_data_variations / (n * m)
+  
   
   return (list("mu_loss" = mu_loss, "D_joint" = dist_space_joint,
                "D_each_joint" = dist_space_each_joint,
                "D_each_separate" = dist_space_each_separate,
                "pred_err_joint" = pred_error_joint,
                "pred_err_separate" = pred_error_separate,
-               "pred_err_oracle" = pred_error_oracle))
+               "pred_err_oracle" = pred_error_oracle, 
+               "signal_var" = total_signal_variations,
+               "data_var" = total_data_variations))
 }
 
 # Simulation
 max.sim = 1000
-n = 300
+
+n = 500
 m = 5
 ds = rep(5, m)
 r = 3
-snr = 0.7
-spec = 1
-if (spec == 1) {
-  A = 2
-} else if (spec == 2) {
-  A = 0.5
-} else if (spec == 3) {
-  A = 0.1
-}
-b1 = snr * (1 - 0.8) * pi / (A * r)
-b2 = (1 - snr) * (1 - 0.8) * pi / (A * r)
+lambda = 1
+
 
 dist_loss = rep(0, max.sim)
 sub_loss_J = matrix(0, nrow = max.sim, ncol = m)
@@ -372,9 +409,11 @@ sub_loss_S = matrix(0, nrow = max.sim, ncol = m)
 PE_J = rep(0, max.sim)
 PE_O = rep(0, max.sim)
 PE_S = rep(0, max.sim)
+var_sig = rep(0, max.sim)
+var_data = rep(0, max.sim)
 
 for (sim in 1:max.sim) {
-  res = simulation(n, ds, r, b1, b2, spec, mu_tol = 1e-4)
+  res = simulation(n, ds, r, kappa = 5 * ds[1], mu_tol = 1e-4)
   
   dist_loss[sim] = res$D_joint
   sub_loss_J[sim,] = res$D_each_joint
@@ -383,16 +422,57 @@ for (sim in 1:max.sim) {
   PE_S[sim] = res$pred_err_separate
   PE_O[sim] = res$pred_err_oracle
   
+  var_sig[sim] = res$signal_var
+  var_data[sim] = res$data_var
+  
   if (sim > 1 && sim %% 100 == 0) {
     cat("iteration", sim, "\n")
   }
 }
 
+mat = cbind(PE_J, PE_S, PE_O, var_sig, var_data); 
+colnames(mat) = c("Joint", "Separate", "Oracle", "Signal variations", "Data variations")
+df <- data.frame(value = as.vector(mat),
+                 group = factor(rep(colnames(mat), each = nrow(mat)),
+                                levels = colnames(mat)))
+ggplot(df, aes(x = group, y = value, fill = group)) +
+  geom_violin(trim = TRUE) +
+  labs(title = paste0("OOS prediction error (geodesic distance); lambda=", lambda),
+       x = "",
+       y = "") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+
+
+
+
+mat = cbind(sub_loss_J, sub_loss_S); 
+pairs <- seq(1, ncol(mat), by = 5)
+colnames(mat) = c(paste("Joint", 1:m), paste("Separate", 1:5))
+
+df <- data.frame(
+  value = as.vector(mat),
+  group = rep(colnames(mat), each = max.sim),
+  pair = rep(rep(paste("Sphere", 1:m), each = nrow(mat)), 2)
+)
+
+# Plot the paired violin plots
+ggplot(df, aes(x = pair, y = value, fill = group)) +
+  geom_boxplot(aes(fill = group), color = "black", position = position_dodge(width = 0.8))  +
+  scale_fill_manual(values = rep("gray", ncol(mat))) +
+  labs(title = paste("Estimated error of loading spaces (after parallel transport); lambda=", lambda),
+       x = "",
+       y = "") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
 mean(dist_loss); sd(dist_loss)
 mean(PE_J); sd(PE_J)
 mean(PE_S); sd(PE_S)
 mean(PE_O); sd(PE_O)
-
+mean(var_sig)
+mean(var_data)
 colMeans(sub_loss_J); apply(sub_loss_J, 2, sd)
 colMeans(sub_loss_S); apply(sub_loss_S, 2, sd)
 
