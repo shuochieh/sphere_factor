@@ -396,7 +396,7 @@ simulation = function (n, ds, r, lambda = 1, type = "vMF", kappa = NULL, b2 = NU
 # Simulation
 max.sim = 1000
 
-n = 500
+n = 300
 m = 5
 ds = rep(5, m)
 r = 3
@@ -413,7 +413,7 @@ var_sig = rep(0, max.sim)
 var_data = rep(0, max.sim)
 
 for (sim in 1:max.sim) {
-  res = simulation(n, ds, r, kappa = 5 * ds[1], mu_tol = 1e-4)
+  res = simulation(n, ds, r, lambda = lambda, kappa = 5 * ds[1], mu_tol = 1e-4)
   
   dist_loss[sim] = res$D_joint
   sub_loss_J[sim,] = res$D_each_joint
@@ -430,8 +430,8 @@ for (sim in 1:max.sim) {
   }
 }
 
-mat = cbind(PE_J, PE_S, PE_O, var_sig, var_data); 
-colnames(mat) = c("Joint", "Separate", "Oracle", "Signal variations", "Data variations")
+mat = cbind(PE_J, PE_S, PE_O); 
+colnames(mat) = c("Joint", "Separate", "Oracle")
 df <- data.frame(value = as.vector(mat),
                  group = factor(rep(colnames(mat), each = nrow(mat)),
                                 levels = colnames(mat)))
