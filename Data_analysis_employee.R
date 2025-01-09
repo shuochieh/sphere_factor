@@ -1,4 +1,4 @@
-by_cat = "sectors"
+by_cat = "states"
 
 # by_cat = sectors: Analysis by sectors, viewing data as product of 7 49-dimensional spheres
 #                   (d = 7, p = 50)
