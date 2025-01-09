@@ -103,6 +103,7 @@ LYB_fm = function (x, r, h, demean = TRUE) {
   # Estimate the factor model of Lam, Yao, and Bathia
   
   if (demean) {
+    mean = colMeans(x)
     x = t(t(x) - colMeans(x))
   }
   
@@ -124,5 +125,6 @@ LYB_fm = function (x, r, h, demean = TRUE) {
   e_hat = x - f_hat %*% t(V)
   
   return (list("V" = V, "f_hat" = f_hat, "e_hat" = e_hat, 
-               "fitted.val" = f_hat %*% t(V)))
+               "fitted.val" = f_hat %*% t(V),
+               "mean" = mean))
 }
