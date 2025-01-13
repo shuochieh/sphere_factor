@@ -24,6 +24,27 @@ states = c("AL", "AK", "AZ", "AR",
            "VT", "VA", 
            "WA", "WI", "WV", "WY")
 
+blue_codes = c(0, 0, 0, 0,
+               1, 1, 1,
+               1,
+               0,
+               0,
+               1,
+               0, 1, 0, 0,
+               0, 0,
+               0,
+               1, 1, 0, 1, 0, 0, 0,
+               1,
+               0, 1, 1, 1, 1, 0, 0,
+               0,
+               0, 0, 1,
+               0, 1,
+               0, 0,
+               0, 0,
+               0,
+               1, 1,
+               1, 0, 0, 0)
+
 # No NRMNN data for DE, HI, MD, NE
 # 144 Missing data for FL
 
@@ -66,7 +87,13 @@ if (by_cat == "states") {
   stop("by_cat must be either states or sectors")
 }
 
-rm(list=setdiff(ls(), c("x", "states", "sectors", "by_cat")))
+smooth_x = array(NA, dim = c(dim(x)[1] - 12, dim(x)[c(2,3)]))
+for (t in 1:(418 - 12)) {
+  smooth_x[t,,] = apply(x[t:(t + 11),,], c(2, 3), mean)
+}
+
+rm(list=setdiff(ls(), c("x", "states", "sectors", "by_cat", "blue_codes",
+                        "smooth_x")))
 
 
 # Analysis by states: Product of 50 6-dimensional spheres

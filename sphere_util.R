@@ -82,13 +82,41 @@ geod_sphere = function (x, y) {
   # x, y can also be n by d matrices (each row is a unit vector)
   # compute the geodesic distance between x, y
   if (is.vector(x) && is.vector(y)) {
-    res = acos(t(x) %*% y)
+    temp = t(x) %*% y
+    if (any(temp > 1.001)) {
+      stop("geod_sphere: clear violation of unit vectors")
+    } else if (any(temp < -0.001)) {
+      stop("geod_sphere: clear violation of unit vectors")
+    }
+    temp = max(min(temp, 1), 0)
+    res = acos(temp)
   } else if (is.matrix(x) && is.vector(y)) {
-    res = c(acos(x %*% y))
-  } else if (is.vector(x) && is.matrix(x)) {
-    res = c(acos(y %*% x))
+    temp = c(x %*% y)
+    if (any(temp > 1.001)) {
+      stop("geod_sphere: clear violation of unit vectors")
+    } else if (any(temp < -0.001)) {
+      stop("geod_sphere: clear violation of unit vectors")
+    }
+    temp = pmax(pmin(temp, 1), 0)
+    res = acos(temp)
+  } else if (is.vector(x) && is.matrix(y)) {
+    temp = c(y %*% x)
+    if (any(temp > 1.001)) {
+      stop("geod_sphere: clear violation of unit vectors")
+    } else if (any(temp < -0.001)) {
+      stop("geod_sphere: clear violation of unit vectors")
+    }
+    temp = pmax(pmin(temp, 1), 0)
+    res = acos(temp)
   } else if (is.matrix(x) && is.matrix(y)) {
-    res = acos(c(diag(x %*% t(y))))
+    temp = c(diag(x %*% t(y)))
+    if (any(temp > 1.001)) {
+      stop("geod_sphere: clear violation of unit vectors")
+    } else if (any(temp < -0.001)) {
+      stop("geod_sphere: clear violation of unit vectors")
+    }
+    temp = pmax(pmin(temp, 1), 0)
+    res = acos(temp)
   } else {
     stop("geod_sphere: x, y has to be vectors or matrices")
   }
@@ -127,4 +155,23 @@ LYB_fm = function (x, r, h, demean = TRUE) {
   return (list("V" = V, "f_hat" = f_hat, "e_hat" = e_hat, 
                "fitted.val" = f_hat %*% t(V),
                "mean" = mean))
+}
+
+predict_fm = function (V, mu, new_x) {
+
+  if (is.matrix(new_x)) {
+    z_temp = t(t(new_x) - mu)
+    Factor = z_temp %*% V
+    z_hat = Factor %*% t(V)
+    x_hat = t(t(z_hat) + mu)
+  } else if (is.vector(new_x)) {
+    z_temp = new_x - mu
+    Factor = c(t(z_temp) %*% V)
+    z_hat = V %*% Factor
+    x_hat = mu + z_hat
+  } else {
+    stop("predict_fm: new_x must be matrix or vector")
+  }
+  
+  return (x_hat)
 }
