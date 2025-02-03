@@ -5,17 +5,17 @@ library(gridExtra)
 
 states = c("AL", "AK", "AZ", "AR", 
            "CA", "CO", "CT", 
-           "DE", 
-           "FL", 
+           # "DE", 
+           # "FL", 
            "GA", 
-           "HI", 
+           # "HI", 
            "ID", "IL", "IA", "IN", 
            "KS", "KY", 
            "LA", 
            "ME", "MA", "MI", "MN", "MS", "MO", "MT", 
-           "MD",
+           # "MD",
            "NV", "NH", "NJ", "NM", "NY", "NC", "ND", 
-           "NE",
+           # "NE",
            "OH", "OK", "OR", 
            "PA", "RI", 
            "SC", "SD", 
@@ -24,32 +24,10 @@ states = c("AL", "AK", "AZ", "AR",
            "VT", "VA", 
            "WA", "WI", "WV", "WY")
 
-blue_codes = c(0, 0, 0, 0,
-               1, 1, 1,
-               1,
-               0,
-               0,
-               1,
-               0, 1, 0, 0,
-               0, 0,
-               0,
-               1, 1, 0, 1, 0, 0, 0,
-               1,
-               0, 1, 1, 1, 1, 0, 0,
-               0,
-               0, 0, 1,
-               0, 1,
-               0, 0,
-               0, 0,
-               0,
-               1, 1,
-               1, 0, 0, 0)
-
 # No NRMNN data for DE, HI, MD, NE
 # 144 Missing data for FL
 
-sectors = c(# "NRMNN", "CONSN", "MFGN", 
-               "TRADN", "INFON", "FIREN", "PBSVN", "EDUHN", "LEIHN", "SRVON")
+sectors = c("NRMNN", "CONSN", "MFGN") #, "TRADN", "INFON", "FIREN", "PBSVN", "EDUHN", "LEIHN", "SRVON")
 
 data_mat = array(NA, dim = c(418, length(states), length(sectors)))
 
@@ -92,8 +70,20 @@ for (t in 1:(418 - 12)) {
   smooth_x[t,,] = apply(x[t:(t + 11),,], c(2, 3), mean)
 }
 
+NE1 = c("CT", "ME", "MA", "NH", "RI", "VT")
+NE2 = c("NJ", "NY", "PA")
+MW1 = c("IL", "IN", "MI", "OH", "WI") 
+MW2 = c("IA", "KS", "MN", "MO", "NE", "ND", "SD")
+South1 = c("FL", "GA", "NC", "SC", "VA", "MD", "DE", "WV")
+South2 = c("AL", "KY", "MS", "TN")
+South3 = c("AR", "LA", "OK", "TX")
+West1 = c("AZ", "CO", "ID", "MT", "NV", "NM", "UT", "WY")
+West2 = c("AK", "CA", "HI", "OR", "WA")
+
 rm(list=setdiff(ls(), c("x", "states", "sectors", "by_cat", "blue_codes",
-                        "smooth_x")))
+                        "smooth_x", "NE1", "NE2", "MW1", "MW2",
+                        "South1", "South2", "South3",
+                        "West1", "West2")))
 
 
 # Analysis by states: Product of 50 6-dimensional spheres
