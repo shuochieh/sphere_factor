@@ -33,12 +33,22 @@ Exp_sphere = function (x, mu) {
   # tangent space --> sphere
   
   if (is.matrix(x)) {
+    
+    if (sum(abs(x)) == 0) {
+      return (matrix(mu, nrow = nrow(x), ncol = ncol(x), byrow = T))
+    }
+    
     x_norm = sqrt(rowSums(x^2))
     std_x = x / x_norm
     res = outer(cos(x_norm), mu) + sin(x_norm) * std_x
     
     res = res / sqrt(rowSums(res^2)) # normalize again to avoid numerical instability
   } else {
+    
+    if (sum(abs(x)) == 0) {
+      return (mu)
+    }
+    
     x_norm = sqrt(sum(x^2))
     res = cos(x_norm) * mu + sin(x_norm) * x / x_norm
     
@@ -85,41 +95,52 @@ geod_sphere = function (x, y) {
     temp = t(x) %*% y
     if (any(temp > 1.001)) {
       stop("geod_sphere: clear violation of unit vectors")
-    } else if (any(temp < -0.001)) {
+    } else if (any(temp < -1.001)) {
       stop("geod_sphere: clear violation of unit vectors")
     }
-    temp = max(min(temp, 1), 0)
+    temp = max(min(temp, 1), -1)
     res = acos(temp)
   } else if (is.matrix(x) && is.vector(y)) {
     temp = c(x %*% y)
     if (any(temp > 1.001)) {
       stop("geod_sphere: clear violation of unit vectors")
-    } else if (any(temp < -0.001)) {
+    } else if (any(temp < -1.001)) {
       stop("geod_sphere: clear violation of unit vectors")
     }
-    temp = pmax(pmin(temp, 1), 0)
+    temp = pmax(pmin(temp, 1), -1)
     res = acos(temp)
   } else if (is.vector(x) && is.matrix(y)) {
     temp = c(y %*% x)
     if (any(temp > 1.001)) {
       stop("geod_sphere: clear violation of unit vectors")
-    } else if (any(temp < -0.001)) {
+    } else if (any(temp < -1.001)) {
       stop("geod_sphere: clear violation of unit vectors")
     }
-    temp = pmax(pmin(temp, 1), 0)
+    temp = pmax(pmin(temp, 1), -1)
     res = acos(temp)
   } else if (is.matrix(x) && is.matrix(y)) {
     temp = c(diag(x %*% t(y)))
     if (any(temp > 1.001)) {
       stop("geod_sphere: clear violation of unit vectors")
-    } else if (any(temp < -0.001)) {
+    } else if (any(temp < -1.001)) {
       stop("geod_sphere: clear violation of unit vectors")
     }
-    temp = pmax(pmin(temp, 1), 0)
+    temp = pmax(pmin(temp, 1), -1)
     res = acos(temp)
   } else {
     stop("geod_sphere: x, y has to be vectors or matrices")
   }
+  
+  return (res)
+}
+
+perp_proj = function (x, mu) {
+  # x: d-dimensional vector
+  # mu: d-dimensional vector
+  # Projects x to the perpendicular subspace of mu
+  
+  res = mu * c(t(mu) %*% x) / (norm(mu, type = "2")^2)
+  res = x - res
   
   return (res)
 }
