@@ -1,4 +1,5 @@
 source("./sphere_util.R")
+source("./BWS_util.R")
 
 main = function (x, r, test_size = 0, oracle_mu = NULL) {
   # x: data that has been taken square root transformations
@@ -180,6 +181,150 @@ main = function (x, r, test_size = 0, oracle_mu = NULL) {
 
 }
 
+main_BWS = function (x, r, test_size = 0, oracle_mu = NULL,
+                     verbose = FALSE) {
+  # x: (n, p, p) array of SPD data
+  # test_size: number of data that will be reserved as test set
+  # oracle_mu: only used in simulation
+  # streamlined function for synthetic and real data analysis
+  
+  n = dim(x)[1]
+  p = dim(x)[2]
+
+  if (test_size > 0) {
+    x_test = x[-c(1:(n - test_size)),,]
+    x = x[1:(n - test_size),,]
+    n = dim(x)[1]
+    n_test = dim(x_test)[1]
+  }
+  
+  # estimate mu
+  mu_hat = mean_on_BWS(x, verbose = verbose)
+  log_x = Log_BWS(x, mu_hat)
+  log_x_vec = array(NA, dim = c(n, p * (p + 1) / 2))
+  for (i in 1:n) {
+    log_x_vec[i,] = symmetric_to_vector(log_x[i,,])
+  }
+  if (test_size > 0) {
+    log_x_test_vec = array(NA, dim = c(n_test, p * (p + 1) / 2))
+    log_x_test = Log_BWS(x_test, mu_hat)
+    for (i in 1:n_test) {
+      log_x_test_vec[i,] = symmetric_to_vector(log_x_test[i,,])
+    }
+  }
+  
+  # estimate factor model
+  model = LYB_fm(log_x_vec, r, h = 6)
+  V = model$V
+  Factors = model$f_hat
+  
+  # fractions of variance explained
+  FVU_g = rep(0, r)  # geodesic distance
+  FVU_e = rep(0, r)  # Euclidean distance
+  TV_g = 0
+  TV_e = 0
+  for (k in 1:r) {
+    z_hat = predict_fm(V[,1:k], model$mean, log_x_vec)
+    
+    x_hat = array(NA, dim = c(n, p, p))
+    for (i in 1:n) {
+      x_hat[i,,] = vector_to_symmetric(z_hat[i,], p)
+    }
+    x_hat = Exp_BWS(x_hat, mu_hat)
+    
+    FVU_g[k] = sum(geod_BWS(x_hat, x)^2)
+    FVU_e[k] = sum(apply(x_hat - x, MARGIN = 1, norm, "F")^2)
+    
+    if (k == 1) {
+      TV_g = sum(geod_BWS(mu_hat, x)^2)
+      TV_e = 0
+      for (i in 1:n) {
+        TV_e = TV_e + norm(mu_hat - x[i,,], "F")^2
+      }
+    }
+  }
+  FVU_g = FVU_g / TV_g
+  FVU_e = FVU_e / TV_e
+  
+  if (test_size > 0) {
+    pred_err_g = rep(0, r)
+    pred_err_e = rep(0, r)
+    for (k in 1:r) {
+      z_hat = predict_fm(V[,1:k], model$mean, log_x_test_vec)
+      
+      x_hat = array(NA, dim = c(n_test, p, p))
+      for (i in 1:n_test) {
+        x_hat[i,,] = vector_to_symmetric(z_hat[i,], p)
+      }
+      x_hat = Exp_BWS(x_hat, mu_hat)
+      
+      pred_err_g[k] = sum(geod_BWS(x_hat, x_test)^2)
+      pred_err_e[k] = sum(apply(x_hat - x_test, MARGIN = 1, norm, "F")^2)
+    }
+    pred_err_g = sqrt(pred_err_g / n_test)
+    pred_err_e = sqrt(pred_err_e / n_test)
+  }
+  
+  # compare with linear factor model
+  FVU_e_linear = rep(0, r)
+  spd_linear = rep(0, r)
+
+  temp_x = array(NA, dim = c(n, p * (p + 1) / 2))
+  for (i in 1:n) {
+    temp_x[i,] = symmetric_to_vector(x[i,,])
+  }
+  
+  model_linear = LYB_fm(temp_x, r, h = 6)
+  V_linear = model_linear$V
+  for (k in 1:r) {
+    z_hat = predict_fm(V_linear[,1:k], model_linear$mean, temp_x)
+    x_hat = array(NA, dim = c(n, p, p))
+    
+    for (i in 1:n) {
+      x_hat[i,,] = vector_to_symmetric(z_hat[i,], p)
+    }
+    
+    FVU_e_linear[k] = sum(apply(x_hat - x, MARGIN = 1, norm, "F")^2) / TV_e
+    spd_linear[k] = prod(apply(x_hat, MARGIN = 1, is.spd))
+  }
+
+  if (test_size > 0) {
+    pred_err_e_linear = rep(0, r)
+    spd_linear_test = rep(0, r)
+    temp_x_test = array(NA, dim = c(n_test, p * (p + 1) /2))
+    for (i in 1:n_test) {
+      temp_x_test[i,] = symmetric_to_vector(x_test[i,,])
+    }
+    
+    for (k in 1:r) {
+      z_hat = predict_fm(V_linear[,1:k], model_linear$mean, temp_x_test)
+      x_hat = array(NA, dim = c(n_test, p, p))
+      
+      for (i in 1:n_test) {
+        x_hat[i,,] = vector_to_symmetric(z_hat[i,], p)
+      }
+      
+      pred_err_e_linear[k] = sum(apply(x_test - x_hat, MARGIN = 1, norm, "F")^2)
+      spd_linear_test[k] = prod(apply(x_hat, MARGIN = 1, is.spd))
+    }
+    pred_err_e_linear = sqrt(pred_err_e_linear / n_test)
+  }
+
+  if (test_size > 0) {
+    return (list("mu_hat" = mu_hat,
+                 "FVU_g" = FVU_g, "FVU_e" = FVU_e, 
+                 "pe_g" = pred_err_g, "pe_e" = pred_err_e,
+                 "V" = V, "Factors" = Factors,
+                 "spd_linear" = spd_linear, "FVU_e_linear" = FVU_e_linear, 
+                 "spd_linear_test" = spd_linear_test, "pe_e_linear" = pred_err_e_linear,
+                 "V_linear" = V_linear))
+  } 
+  return (list("mu_hat" = mu_hat,
+               "FVU_g" = FVU_g, "FVU_e" = FVU_e, 
+               "V" = V, "Factors" = Factors,
+               "spd_linear" = spd_linear, "FVU_e_linear" = FVU_e_linear, 
+               "V_linear" = V_linear))
+}
 
 
 
