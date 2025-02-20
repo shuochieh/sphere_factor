@@ -4,3 +4,4 @@ Figs/
 sp500_covariance/
 .Rhistory
 .DS_Store
+.ipynb_checkpoints/

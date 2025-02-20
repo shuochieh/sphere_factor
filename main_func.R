@@ -249,6 +249,7 @@ main_BWS = function (x, r, test_size = 0, oracle_mu = NULL,
   if (test_size > 0) {
     pred_err_g = rep(0, r)
     pred_err_e = rep(0, r)
+    x_hat_RFM = array(NA, dim = c(n_test, r, p, p))
     for (k in 1:r) {
       z_hat = predict_fm(V[,1:k], model$mean, log_x_test_vec)
       
@@ -260,6 +261,7 @@ main_BWS = function (x, r, test_size = 0, oracle_mu = NULL,
       
       pred_err_g[k] = sum(geod_BWS(x_hat, x_test)^2)
       pred_err_e[k] = sum(apply(x_hat - x_test, MARGIN = 1, norm, "F")^2)
+      x_hat_RFM[,k,,] = x_hat
     }
     pred_err_g = sqrt(pred_err_g / n_test)
     pred_err_e = sqrt(pred_err_e / n_test)
@@ -296,6 +298,7 @@ main_BWS = function (x, r, test_size = 0, oracle_mu = NULL,
       temp_x_test[i,] = symmetric_to_vector(x_test[i,,])
     }
     
+    x_hat_LFM = array(NA, dim = c(n_test, r, p, p))
     for (k in 1:r) {
       z_hat = predict_fm(V_linear[,1:k], model_linear$mean, temp_x_test)
       x_hat = array(NA, dim = c(n_test, p, p))
@@ -306,18 +309,21 @@ main_BWS = function (x, r, test_size = 0, oracle_mu = NULL,
       
       pred_err_e_linear[k] = sum(apply(x_test - x_hat, MARGIN = 1, norm, "F")^2)
       spd_linear_test[k] = prod(apply(x_hat, MARGIN = 1, is.spd))
+      x_hat_LFM[,k,,] = x_hat
     }
     pred_err_e_linear = sqrt(pred_err_e_linear / n_test)
   }
-
+  
   if (test_size > 0) {
     return (list("mu_hat" = mu_hat,
                  "FVU_g" = FVU_g, "FVU_e" = FVU_e, 
                  "pe_g" = pred_err_g, "pe_e" = pred_err_e,
                  "V" = V, "Factors" = Factors,
+                 "x_hat_RFM" = x_hat_RFM,
                  "spd_linear" = spd_linear, "FVU_e_linear" = FVU_e_linear, 
                  "spd_linear_test" = spd_linear_test, "pe_e_linear" = pred_err_e_linear,
-                 "V_linear" = V_linear))
+                 "V_linear" = V_linear,
+                 "x_hat_LFM" = x_hat_LFM))
   } 
   return (list("mu_hat" = mu_hat,
                "FVU_g" = FVU_g, "FVU_e" = FVU_e, 
