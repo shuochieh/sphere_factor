@@ -12,8 +12,8 @@ main = function (x, r, test_size = 0, oracle_mu = NULL) {
   p = dim(x)[3]
   
   if (test_size > 0) {
-    x_test = x[-c(1:(n - test_size)),,]
-    x = x[1:(n - test_size),,]
+    x_test = x[-c(1:(n - test_size)),,, drop = FALSE]
+    x = x[1:(n - test_size),,, drop = FALSE]
     n = dim(x)[1]
     n_test = dim(x_test)[1]
     
