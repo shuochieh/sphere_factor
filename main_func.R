@@ -332,6 +332,229 @@ main_BWS = function (x, r, test_size = 0, oracle_mu = NULL,
                "V_linear" = V_linear))
 }
 
+main_uneven_sphere = function (x, r, test_size = 0) {
+  # x: data that has been taken square root transformations
+  #    and is a list of n by p_i matrices
+  #    with length of the list = d
+  # test_size: number of data that will be reserved as test set
+  # streamlined function for synthetic and real data analysis
+  
+  n = nrow(x[[1]])
+  d = length(x)
+  ps = rep(NA, d)
+  for (i in 1:d) {
+    ps[i] = ncol(x[[i]])
+  }
+  
+  if (test_size > 0) {
+    x_test = vector("list", d)
+    for (i in 1:d) {
+      x_test[[i]] = x[[i]][-c(1:(n - test_size)),, drop = FALSE]
+      x[[i]] = x[[i]][1:(n - test_size),, drop = FALSE]
+    }
+    n = nrow(x[[1]])
+    n_test = nrow(x_test[[1]])
+    
+    log_x_test = matrix(nrow = n_test, ncol = sum(ps))
+  }
+  
+  # estimate mu
+  mu_hat = vector("list", d)
+  log_x = matrix(NA, nrow = n, ncol = sum(ps))
+  geod_to_mean = array(NA, dim = c(n, d))
+  for (i in 1:d) {
+    mu_hat[[i]] = mean_on_sphere(x[[i]])
+    if (i == 1) {
+      log_x[,1:ps[1]] = Log_sphere(x[[i]], mu_hat[[i]])
+      if (test_size > 0) {
+        log_x_test[,1:ps[1]] = Log_sphere(x_test[[i]], mu_hat[[i]])
+      }
+    } else {
+      log_x[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))] = Log_sphere(x[[i]], mu_hat[[i]])
+      if (test_size > 0) {
+        log_x_test[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))] = Log_sphere(x_test[[i]], mu_hat[[i]])
+      }
+    }
+
+    geod_to_mean[,i] = geod_sphere(mu_hat[[i]], x[[i]])
+  }
+  
+  # estimate factor model
+  model = LYB_fm(log_x, r, h = 6)
+  V = model$V
+  Factors = model$f_hat
+  
+  # fractions of variance explained
+  FVU_g = rep(0, r)  # geodesic distance
+  FVU_e = rep(0, r)  # Euclidean distance
+  TV_g = 0
+  TV_e = 0
+  for (k in 1:r) {
+    z_hat = predict_fm(V[,1:k], model$mean, log_x)
+    for (i in 1:d) {
+      if (i == 1) {
+        x_hat = Exp_sphere(z_hat[,1:ps[1]], mu_hat[[i]])
+      } else {
+        x_hat = Exp_sphere(z_hat[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))], mu_hat[[i]])
+      }
+      FVU_g[k] = FVU_g[k] + sum(geod_sphere(x[[i]], x_hat)^2)
+      FVU_e[k] = FVU_e[k] + sum((x[[i]] - x_hat)^2)
+
+      if (k == 1) {
+        TV_g = TV_g + sum(geod_sphere(x[[i]], mu_hat[[i]])^2)
+        TV_e = TV_e + sum((t(x[[i]]) - mu_hat[[i]])^2)
+      }
+    }
+  }
+  FVU_g = FVU_g / TV_g
+  FVU_e = FVU_e / TV_e
+  
+  if (test_size > 0) {
+    pred_err_g = rep(0, r)
+    pred_err_e = rep(0, r)
+    for (k in 1:r) {
+      z_hat = predict_fm(V[,1:k], model$mean, log_x_test)
+      for (i in 1:d) {
+        if (i == 1) {
+          x_hat = Exp_sphere(z_hat[,1:ps[1]], mu_hat[[i]])
+        } else {
+          x_hat = Exp_sphere(z_hat[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))], mu_hat[[i]])
+        }
+        pred_err_g[k] = pred_err_g[k] + sum(geod_sphere(x_test[[i]], x_hat)^2)
+        pred_err_e[k] = pred_err_e[k] + sum((x_test[[i]] - x_hat)^2)
+      }
+    }
+    pred_err_g = sqrt(pred_err_g / n_test)
+    pred_err_e = sqrt(pred_err_e / n_test)
+  }
+  
+  # compare with linear factor model
+  FVU_g_linear = rep(0, r)
+  FVU_e_linear = rep(0, r)
+  
+  temp_x = NULL
+  for (i in 1:d) {
+    temp_x = cbind(temp_x, x[[i]])
+  }
+
+  model_linear = LYB_fm(temp_x, r, h = 6)
+  V_linear = model_linear$V
+  for (k in 1:r) {
+    x_hat = predict_fm(V_linear[,1:k], model_linear$mean, temp_x)
+    FVU_e_linear[k] = norm(x_hat - temp_x, "F")^2 / TV_e
+    for (i in 1:d) {
+      if (i == 1) {
+        proj_xhat = x_hat[,1:ps[1]] / 
+          apply(x_hat[,1:ps[1]], 1, norm, "2")
+      } else {
+        proj_xhat = x_hat[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))] / 
+          apply(x_hat[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))], 1, norm, "2")
+      }
+      FVU_g_linear[k] = FVU_g_linear[k] + sum(geod_sphere(x[[i]], proj_xhat)^2)
+    }
+    FVU_g_linear[k] = FVU_g_linear[k] / TV_g
+  }
+  
+  if (test_size > 0) {
+    pred_err_g_linear = rep(0, r)
+    pred_err_e_linear = rep(0, r)
+    temp_x_test = array(NA, dim = c(n_test, sum(ps)))
+    for (i in 1:d) {
+      if (i == 1) {
+        temp_x_test[,1:sum(ps[1])] = x_test[[1]]
+      } else {
+        temp_x_test[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))] = x_test[[i]]
+      }
+    }
+
+    for (k in 1:r) {
+      x_hat = predict_fm(V_linear[,1:k], model_linear$mean, temp_x_test)
+      pred_err_e_linear[k] = sqrt(norm(x_hat - temp_x_test, "F")^2 / n_test)
+      
+      for (i in 1:d) {
+        if (i == 1) {
+          proj_xhat = x_hat[,1:ps[1]] / 
+            apply(x_hat[,1:ps[1]], 1, norm, "2")
+        } else {
+          proj_xhat = x_hat[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))] / 
+            apply(x_hat[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))], 1, norm, "2")
+        }
+        pred_err_g_linear[k] = pred_err_e_linear[k] + sum(geod_sphere(x_test[[i]], proj_xhat)^2)
+      }
+      
+      pred_err_g_linear[k] = sqrt(pred_err_g_linear[k] / n_test)
+    }
+  }
+  
+  # compare with separate factor model
+  # FVU_g_sprt = rep(0, r)
+  # FVU_e_sprt = rep(0, r)
+  # V_sprt = array(NA, dim = c(sum(ps), r))
+  # for (i in 1:d) {
+  #   if (i == 1) {
+  #     model_sprt = LYB_fm(log_x[,1:sum(ps[1])], r, h = 6)
+  #     V_sprt[1:ps[1], 1:r] = model_sprt$V
+  #   } else {
+  #     model_sprt = LYB_fm(log_x[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))], r, h = 6)
+  #     V_sprt[(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i])),1:r] = model_sprt$V
+  #   }
+  #   for (k in 1:r) {
+  #     if (i == 1) {
+  #       z_hat = predict_fm(model_sprt$V[,1:k], model_sprt$mean, log_x[,1:ps[1]])
+  #     } else {
+  #       z_hat = predict_fm(model_sprt$V[,1:k], model_sprt$mean, log_x[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))])
+  #     }
+  #     x_hat = Exp_sphere(z_hat, mu_hat[i,])
+  #     
+  #     FVU_g_sprt[k] = FVU_g_sprt[k] + sum(geod_sphere(x_hat, x[[i]])^2)
+  #     FVU_e_sprt[k] = FVU_e_sprt[k] + sum((x_hat - x[[i]])^2)
+  #   }
+  # }
+  # FVU_g_sprt = FVU_g_sprt / TV_g
+  # FVU_e_sprt = FVU_e_sprt / TV_e
+  # 
+  # if (test_size > 0) {
+  #   pred_err_g_sprt = rep(0, r)
+  #   pred_err_e_sprt = rep(0, r)
+  #   for (i in 1:d) {
+  #     if (i == 1) {
+  #       model_sprt = LYB_fm(log_x[,1:ps[1]], r, h = 6)
+  #     } else {
+  #       model_sprt = LYB_fm(log_x[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))], r, h = 6)
+  #     }
+  #     for (k in 1:r) {
+  #       if (i == 1) {
+  #         z_hat = predict_fm(V_sprt[1:ps[1],1:k], model_sprt$mean, 
+  #                            log_x_test[,1:ps[1]])
+  #       } else {
+  #         z_hat = predict_fm(V_sprt[(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i])),1:k], model_sprt$mean, 
+  #                            log_x_test[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))])
+  #       }
+  #       x_hat = Exp_sphere(z_hat, mu_hat[[i]])
+  #       pred_err_g_sprt[k] = pred_err_g_sprt[k] + sum(geod_sphere(x_test[[i]], x_hat)^2)
+  #       pred_err_e_sprt[k] = pred_err_e_sprt[k] + sum((x_test[[i]] - x_hat)^2)
+  #     }
+  #   }
+  #   pred_err_g_sprt = sqrt(pred_err_g_sprt / n_test)
+  #   pred_err_e_sprt = sqrt(pred_err_e_sprt / n_test)
+  # }
+  
+  
+  if (test_size > 0) {
+    return (list("FVU_g" = FVU_g, "FVU_e" = FVU_e, 
+                 "pe_g" = pred_err_g, "pe_e" = pred_err_e,
+                 "V" = V,
+                 "FVU_g_linear" = FVU_g_linear, "FVU_e_linear" = FVU_e_linear, 
+                 "pe_g_linear" = pred_err_g_linear, "pe_e_linear" = pred_err_e_linear,
+                 "V_linear" = V_linear,
+                 "geod_to_mean" = geod_to_mean))
+  } 
+  return (list("FVU_g" = FVU_g, "FVU_e" = FVU_e, 
+               "V" = V,
+               "FVU_g_linear" = FVU_g_linear, "FVU_e_linear" = FVU_e_linear,
+               "V_linear" = V_linear,
+               "geod_to_mean" = geod_to_mean))
+}
 
 
 

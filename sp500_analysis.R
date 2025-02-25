@@ -119,7 +119,7 @@ tsp = plot_time_series(x = data.frame(Time = seq(from = as.Date("2000-01-01"), t
                        x_label = "Time",
                        l_size = 0.7,
                        p_size = 0,
-                       legend = "top",
+                       legend.pos = "top",
                        legend_title = "")
 print(tsp)
 
