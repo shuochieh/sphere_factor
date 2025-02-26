@@ -65,11 +65,25 @@ for (zz in 1:11){
 }
 
 # Sector-specific
-results = main(array(x[[6]], c(nrow(x[[6]]), 1, ncol(x[[6]]))), 15, test_size = 2004)
-plot(results$FVU_e, type = "b")
+results = main(array(x[[6]], c(nrow(x[[6]]), 1, ncol(x[[6]]))), 15, test_size = 1004)
+plot(results$FVU_e, type = "b", 
+     xlab = "Number of factors",
+     ylab = "Fraction of (Euclidean) variations unexplained")
 lines(results$FVU_e_linear, col = 2, type = "b")
-plot(results$pe_e, type = "b")
+legend("topright",
+       col = c(1,2),
+       lty = c(1, 1),
+       pch = c(16, 16),
+       legend = c("sphere factor", "linear factor"))
+plot(results$pe_e, type = "b",
+     xlab = "Number of factors",
+     ylab = "(Euclidean) Prediction errors", ylim = c(0, 0.25))
 lines(results$pe_e_linear, col = 2, type = "b")
+legend("topright",
+       col = c(1,2),
+       lty = c(1, 1),
+       pch = c(16, 16),
+       legend = c("sphere factor", "linear factor"))
 
 par(mfrow = c(1, 1))
 plot(results$FVU_e, type = "b")
@@ -78,7 +92,7 @@ plot(results$pe_e, type = "b", ylim = c(0,max(results$pe_e)))
 lines(results$pe_e_linear, type = "b", col = 2)
 
 # Multiple sectors
-results = main_uneven_sphere(x[c(3,6)], 15, test_size = 2004)
+results = main_uneven_sphere(x[c(3,6)], 15, test_size = 1004)
 plot(results$FVU_e, type = "b")
 lines(results$FVU_e_linear, col = 2, type = "b")
 plot(results$pe_e, type = "b")
