@@ -124,6 +124,7 @@ main = function (x, r, test_size = 0, oracle_mu = NULL) {
   }
   
   # compare with separate factor model
+  r = min(r, p - 1)
   FVU_g_sprt = rep(0, r)
   FVU_e_sprt = rep(0, r)
   V_sprt = array(NA, dim = c(d * p, r))
@@ -170,14 +171,16 @@ main = function (x, r, test_size = 0, oracle_mu = NULL) {
                  "V_linear" = V_linear,
                  "FVU_g_sprt" = FVU_g_sprt, "FVU_e_sprt" = FVU_e_sprt,
                  "pe_g_sprt" = pred_err_g_sprt, "pe_e_sprt" = pred_err_e_sprt,
-                 "V_sprt" = V_sprt))
+                 "V_sprt" = V_sprt,
+                 "geod" = geod_to_mean))
   } 
   return (list("FVU_g" = FVU_g, "FVU_e" = FVU_e, 
                "V" = V,
                "FVU_g_linear" = FVU_g_linear, "FVU_e_linear" = FVU_e_linear,
                "V_linear" = V_linear,
                "FVU_g_sprt" = FVU_g_sprt, "FVU_e_sprt" = FVU_e_sprt,
-               "V_sprt" = V_sprt))
+               "V_sprt" = V_sprt,
+               "geod" = geod_to_mean))
 
 }
 
