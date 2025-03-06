@@ -39,6 +39,7 @@ Exp_sphere = function (x, mu) {
     }
     
     x_norm = sqrt(rowSums(x^2))
+    x_norm[which(x_norm == 0)] = 1
     std_x = x / x_norm
     res = outer(cos(x_norm), mu) + sin(x_norm) * std_x
     
