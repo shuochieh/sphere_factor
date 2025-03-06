@@ -3,6 +3,7 @@ Employee_data/
 Figs/
 sp500_covariance/
 precipitation/
+life_tables/
+.ipynb_checkpoints/
 .Rhistory
 .DS_Store
-.ipynb_checkpoints/

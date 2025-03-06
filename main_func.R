@@ -335,7 +335,7 @@ main_BWS = function (x, r, test_size = 0, oracle_mu = NULL,
                "V_linear" = V_linear))
 }
 
-main_uneven_sphere = function (x, r, test_size = 0) {
+main_uneven_sphere = function (x, r, test_size = 0, h = 6) {
   # x: data that has been taken square root transformations
   #    which is a list of n by p_i matrices
   #    with length of the list = d
@@ -385,7 +385,7 @@ main_uneven_sphere = function (x, r, test_size = 0) {
   }
   
   # estimate factor model
-  model = LYB_fm(log_x, r, h = 6)
+  model = LYB_fm(log_x, r, h = h)
   V = model$V
   Factors = model$f_hat
   
@@ -415,8 +415,8 @@ main_uneven_sphere = function (x, r, test_size = 0) {
   FVU_e = FVU_e / TV_e
   
   if (test_size > 0) {
-    pred_err_g = rep(0, r)
-    pred_err_e = rep(0, r)
+    pred_err_g = matrix(0, ncol = r, nrow = d)
+    pred_err_e = matrix(0, ncol = r, nrow = d)
     for (k in 1:r) {
       z_hat = predict_fm(V[,1:k], model$mean, log_x_test)
       for (i in 1:d) {
@@ -425,10 +425,10 @@ main_uneven_sphere = function (x, r, test_size = 0) {
         } else {
           x_hat = Exp_sphere(z_hat[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))], mu_hat[[i]])
         }
-        pred_err_g[k] = pred_err_g[k] + sum(geod_sphere(x_test[[i]], x_hat)^2)
+        pred_err_g[i,k] = pred_err_g[i,k] + sum(geod_sphere(x_test[[i]], x_hat)^2)
         
         # Euclidean prediction error for the raw data
-        pred_err_e[k] = pred_err_e[k] + sum((x_test[[i]]^2 - x_hat^2)^2)
+        pred_err_e[i,k] = pred_err_e[i,k] + sum((x_test[[i]]^2 - x_hat^2)^2)
       }
     }
     pred_err_g = sqrt(pred_err_g / n_test)
@@ -444,7 +444,7 @@ main_uneven_sphere = function (x, r, test_size = 0) {
     temp_x = cbind(temp_x, x[[i]])
   }
 
-  model_linear = LYB_fm(temp_x, r, h = 6)
+  model_linear = LYB_fm(temp_x, r, h = h)
   V_linear = model_linear$V
   for (k in 1:r) {
     x_hat = predict_fm(V_linear[,1:k], model_linear$mean, temp_x)
@@ -463,8 +463,8 @@ main_uneven_sphere = function (x, r, test_size = 0) {
   }
   
   if (test_size > 0) {
-    pred_err_g_linear = rep(0, r)
-    pred_err_e_linear = rep(0, r)
+    pred_err_g_linear = matrix(0, ncol = r, nrow = d)
+    pred_err_e_linear = matrix(0, ncol = r, nrow = d)
     temp_x_test = array(NA, dim = c(n_test, sum(ps)))
     for (i in 1:d) {
       if (i == 1) {
@@ -476,31 +476,68 @@ main_uneven_sphere = function (x, r, test_size = 0) {
 
     for (k in 1:r) {
       x_hat = predict_fm(V_linear[,1:k], model_linear$mean, temp_x_test)
-      pred_err_e_linear[k] = sqrt(norm(x_hat^2 - temp_x_test^2, "F")^2 / n_test)
+      # pred_err_e_linear[k] = sqrt(norm(x_hat^2 - temp_x_test^2, "F")^2 / n_test)
       
       for (i in 1:d) {
         if (i == 1) {
           proj_xhat = x_hat[,1:ps[1]] / 
             apply(x_hat[,1:ps[1]], 1, norm, "2")
+          pred_err_e_linear[1,k] = sqrt(norm(x_hat[,1:ps[1]]^2 - temp_x_test[,1:ps[1]]^2, "F")^2 / n_test)
         } else {
           proj_xhat = x_hat[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))] / 
             apply(x_hat[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))], 1, norm, "2")
+          pred_err_e_linear[i,k] = sqrt(norm(x_hat[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))]^2 - 
+                                               temp_x_test[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))]^2, "F")^2 / n_test)
         }
-        pred_err_g_linear[k] = pred_err_e_linear[k] + sum(geod_sphere(x_test[[i]], proj_xhat)^2)
+        pred_err_g_linear[i,k] = pred_err_g_linear[i,k] + sum(geod_sphere(x_test[[i]], proj_xhat)^2)
       }
       
-      pred_err_g_linear[k] = sqrt(pred_err_g_linear[k] / n_test)
+      pred_err_g_linear[,k] = sqrt(pred_err_g_linear[,k] / n_test)
+    }
+  }
+  
+  # Compare with linear factor model applied directly to raw data
+  temp_x = NULL
+  for (i in 1:d) {
+    temp_x = cbind(temp_x, x[[i]]^2)
+  }
+  
+  model_linear_direct = LYB_fm(temp_x, r, h = h)
+  V_linear = model_linear_direct$V
+  
+  if (test_size > 0) {
+    pred_err_e_linear_direct = matrix(0, ncol = r, nrow = d)
+    temp_x_test = array(NA, dim = c(n_test, sum(ps)))
+    for (i in 1:d) {
+      if (i == 1) {
+        temp_x_test[,1:sum(ps[1])] = x_test[[1]]^2
+      } else {
+        temp_x_test[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))] = x_test[[i]]^2
+      }
+    }
+    
+    for (k in 1:r) {
+      x_hat = predict_fm(V_linear[,1:k], model_linear_direct$mean, temp_x_test)
+      for (i in 1:d) {
+        if (i == 1) {
+          pred_err_e_linear_direct[1,k] = sqrt(norm(x_hat[,1:ps[1]] - temp_x_test[,1:ps[1]], "F")^2 / n_test)
+        } else {
+          pred_err_e_linear_direct[i,k] = sqrt(norm(x_hat[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))] - 
+                                                      temp_x_test[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))], "F")^2 / n_test)
+        }
+      } 
     }
   }
   
   # compare with separate factor model
+  r = min(min(ps) - 1, r)
   FVU_g_sprt = rep(0, r)
   FVU_e_sprt = rep(0, r)
   V_sprt = array(NA, dim = c(sum(ps), r))
   
   for (i in 1:d) {
     if (i == 1) {
-      model_sprt = LYB_fm(log_x[,1:sum(ps[1])], r, h = 6)
+      model_sprt = LYB_fm(log_x[,1:sum(ps[1])], r, h = h)
       V_sprt[1:ps[1], 1:r] = model_sprt$V
     } else {
       model_sprt = LYB_fm(log_x[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))], r, h = 6)
@@ -512,7 +549,7 @@ main_uneven_sphere = function (x, r, test_size = 0) {
       } else {
         z_hat = predict_fm(model_sprt$V[,1:k], model_sprt$mean, log_x[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))])
       }
-      x_hat = Exp_sphere(z_hat, mu_hat[i,])
+      x_hat = Exp_sphere(z_hat, mu_hat[[i]])
 
       FVU_g_sprt[k] = FVU_g_sprt[k] + sum(geod_sphere(x_hat, x[[i]])^2)
       FVU_e_sprt[k] = FVU_e_sprt[k] + sum((x_hat - x[[i]])^2)
@@ -522,8 +559,8 @@ main_uneven_sphere = function (x, r, test_size = 0) {
   FVU_e_sprt = FVU_e_sprt / TV_e
 
   if (test_size > 0) {
-    pred_err_g_sprt = rep(0, r)
-    pred_err_e_sprt = rep(0, r)
+    pred_err_g_sprt = matrix(0, ncol = r, nrow = d)
+    pred_err_e_sprt = matrix(0, ncol = r, nrow = d)
     for (i in 1:d) {
       if (i == 1) {
         model_sprt = LYB_fm(log_x[,1:ps[1]], r, h = 6)
@@ -539,41 +576,14 @@ main_uneven_sphere = function (x, r, test_size = 0) {
                              log_x_test[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))])
         }
         x_hat = Exp_sphere(z_hat, mu_hat[[i]])
-        pred_err_g_sprt[k] = pred_err_g_sprt[k] + sum(geod_sphere(x_test[[i]], x_hat)^2)
+        pred_err_g_sprt[i,k] = pred_err_g_sprt[i,k] + sum(geod_sphere(x_test[[i]], x_hat)^2)
         
-        pred_err_e_sprt[k] = pred_err_e_sprt[k] + sum((x_test[[i]]^2 - x_hat^2)^2)
+        pred_err_e_sprt[i,k] = pred_err_e_sprt[i,k] + sum((x_test[[i]]^2 - x_hat^2)^2)
       }
     }
     pred_err_g_sprt = sqrt(pred_err_g_sprt / n_test)
     pred_err_e_sprt = sqrt(pred_err_e_sprt / n_test)
   }
-  
-  # Compare with linear factor model applied directly to raw data
-  temp_x = NULL
-  for (i in 1:d) {
-    temp_x = cbind(temp_x, x[[i]]^2)
-  }
-  
-  model_linear_direct = LYB_fm(temp_x, r, h = 6)
-  V_linear = model_linear_direct$V
-
-  if (test_size > 0) {
-    pred_err_e_linear_direct = rep(0, r)
-    temp_x_test = array(NA, dim = c(n_test, sum(ps)))
-    for (i in 1:d) {
-      if (i == 1) {
-        temp_x_test[,1:sum(ps[1])] = x_test[[1]]^2
-      } else {
-        temp_x_test[,(sum(ps[1:(i - 1)]) + 1):(sum(ps[1:i]))] = x_test[[i]]^2
-      }
-    }
-    
-    for (k in 1:r) {
-      x_hat = predict_fm(V_linear[,1:k], model_linear_direct$mean, temp_x_test)
-      pred_err_e_linear_direct[k] = sqrt(norm(x_hat - temp_x_test, "F")^2 / n_test)
-    }
-  }
-  
   
   
   if (test_size > 0) {
