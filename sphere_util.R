@@ -12,7 +12,13 @@ mean_on_sphere = function (x, tau = 0.1, tol = 1e-8, max.iter = 1000, verbose = 
     grad = colMeans(Log_sphere(x, mu))
     mu_new = Exp_sphere(mu + tau * grad, mu)
     
-    loss = mean(acos(x %*% mu_new / sqrt(rowSums(x^2))))
+    temp = c(x %*% mu_new / sqrt(rowSums(x^2)))
+    if (any(temp > 1.01) || any(temp < -1.01)) {
+      stop("mean_on_sphere: something must be wrong")
+    } else {
+      temp = pmin(pmax(temp, -1), 1)
+    }
+    loss = mean(acos(temp))
     if (i > 1 && (loss_old - loss < tol)) {
       mu = mu_new
       break
@@ -70,15 +76,17 @@ Log_sphere = function (x, mu) {
     Proj = Proj / sqrt(rowSums(Proj^2))
     
     res = acos(c(x %*% mu)) * Proj
-    if (any(rowSums(abs(w)) == 0)) {
-      res[which(rowSums(abs(w)) == 0),] = 0
-    }
     
+    if (any(rowSums(abs(w)) < 1e-7)) {
+      res[which(rowSums(abs(w)) < 1e-7),] = 0
+    }
+
+
   } else {
     w = x - mu
     Proj = w - mu * c(t(mu) %*% w)
     
-    if (sum(abs(w)) == 0) {
+    if (sum(abs(w)) < 1e-7) {
       res = rep(0, length(mu))
     } else {
       res = acos(c(x %*% mu)) * Proj / sqrt(sum(Proj^2))
