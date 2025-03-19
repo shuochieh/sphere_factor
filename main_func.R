@@ -184,11 +184,9 @@ source("./BWS_util.R")
 # 
 # }
 
-main_BWS = function (x, r, test_size = 0, oracle_mu = NULL,
-                     verbose = FALSE) {
+main_BWS = function (x, r, test_size = 0, h = 6, mu_tol = 1e-3, verbose = FALSE) {
   # x: (n, p, p) array of SPD data
   # test_size: number of data that will be reserved as test set
-  # oracle_mu: only used in simulation
   # streamlined function for synthetic and real data analysis
   
   n = dim(x)[1]
@@ -202,7 +200,7 @@ main_BWS = function (x, r, test_size = 0, oracle_mu = NULL,
   }
   
   # estimate mu
-  mu_hat = mean_on_BWS(x, verbose = verbose)
+  mu_hat = mean_on_BWS(x, tol = mu_tol, verbose = verbose)
   log_x = Log_BWS(x, mu_hat)
   log_x_vec = array(NA, dim = c(n, p * (p + 1) / 2))
   for (i in 1:n) {
@@ -215,9 +213,11 @@ main_BWS = function (x, r, test_size = 0, oracle_mu = NULL,
       log_x_test_vec[i,] = symmetric_to_vector(log_x_test[i,,])
     }
   }
+  Euclidean_mu = colMeans(x, dims = 1)
+  
   
   # estimate factor model
-  model = LYB_fm(log_x_vec, r, h = 6)
+  model = LYB_fm(log_x_vec, r, h = h)
   V = model$V
   Factors = model$f_hat
   
@@ -242,7 +242,7 @@ main_BWS = function (x, r, test_size = 0, oracle_mu = NULL,
       TV_g = sum(geod_BWS(mu_hat, x)^2)
       TV_e = 0
       for (i in 1:n) {
-        TV_e = TV_e + norm(mu_hat - x[i,,], "F")^2
+        TV_e = TV_e + norm(Euclidean_mu - x[i,,], "F")^2
       }
     }
   }
@@ -279,7 +279,7 @@ main_BWS = function (x, r, test_size = 0, oracle_mu = NULL,
     temp_x[i,] = symmetric_to_vector(x[i,,])
   }
   
-  model_linear = LYB_fm(temp_x, r, h = 6)
+  model_linear = LYB_fm(temp_x, r, h = h)
   V_linear = model_linear$V
   for (k in 1:r) {
     z_hat = predict_fm(V_linear[,1:k], model_linear$mean, temp_x)
@@ -326,13 +326,15 @@ main_BWS = function (x, r, test_size = 0, oracle_mu = NULL,
                  "spd_linear" = spd_linear, "FVU_e_linear" = FVU_e_linear, 
                  "spd_linear_test" = spd_linear_test, "pe_e_linear" = pred_err_e_linear,
                  "V_linear" = V_linear,
-                 "x_hat_LFM" = x_hat_LFM))
+                 "x_hat_LFM" = x_hat_LFM,
+                 "TV_e" = TV_e))
   } 
   return (list("mu_hat" = mu_hat,
                "FVU_g" = FVU_g, "FVU_e" = FVU_e, 
                "V" = V, "Factors" = Factors,
                "spd_linear" = spd_linear, "FVU_e_linear" = FVU_e_linear, 
-               "V_linear" = V_linear))
+               "V_linear" = V_linear,
+               "TV_e" = TV_e))
 }
 
 main_uneven_sphere = function (x, r, test_size = 0, h = 6) {
