@@ -42,6 +42,30 @@ plot_time_series <- function(x, time = NULL, series_cols = NULL,
   return (p)
 }
 
+plot_assist = function (x, label.y, title = "", legend.if = FALSE) {
+  Labels = c("Riemannian factor model", "Linear factor model", "Oracle prediction error")
+  colors = c("red", "blue", "green")
+  percentiles = array(NA, dim = c(3, 10, 2))
+  for (i in 1:3) {
+    percentiles[i,,] = cbind(apply(x[,i,], 2, quantile, 0.05), apply(x[,i,], 2, quantile, 0.95))
+  }
+  means = colMeans(x, dims = 1)
+  
+  plot(NA, xlim = range(1:10), ylim = c(0, max(percentiles)), 
+       xlab = "Number of factors", ylab = label.y, main = title)
+  for (i in 1:3) {
+    polygon(c(1:10, 10:1),
+            c(percentiles[i,,1], rev(percentiles[i,,2])),
+            col = adjustcolor(colors[i], alpha.f = 0.2), border = NA)
+    lines(1:10, means[i,], col = colors[i], lwd = 2, type = "b",
+          pch = i - 1)
+  }
+  if (legend.if) {
+    legend("topright", legend = Labels, col = colors, lwd = 2, pch = c(0, 1, 2), 
+           bty = "n")
+  }
+}
+
 dta_gen = function (n, type, manifold.type, fac_sd = 1) {
   # type: specifications
   # manifold.type: "BWS" or "Sphere"
@@ -54,6 +78,16 @@ dta_gen = function (n, type, manifold.type, fac_sd = 1) {
     fac_noise = 2.0
     alpha = 0.8 # AR coefficient for factor process
   }
+  
+  if (type == 2) {
+    # BWS space p by p SPD matrices
+    p = 10
+    r = 5
+    inj_noise = 0.5
+    fac_noise = 1.0
+    alpha = 0.8 # AR coefficient for factor process
+  }
+  
   
   if (manifold.type == "BWS") {
     mu_P = matrix(rnorm(500 * p), ncol = p)
@@ -82,10 +116,9 @@ dta_gen = function (n, type, manifold.type, fac_sd = 1) {
       V = vector_to_symmetric(Z[t,], p)
       X_nless[t,,] = Exp_BWS_core(V, mu)
       
-      noise_P = rnorm(p * (p + 1) / 2)
-      noise_P = vector_to_symmetric(noise_P, p)
-      noise = inj_noise * noise_P
-      
+      noise_P = rnorm(p * (p + 1) / 2, sd = inj_noise * sqrt(2 / (p * (p + 1))))
+      noise = vector_to_symmetric(noise_P, p)
+
       X[t,,] = Exp_BWS_core(noise, X_nless[t,,])
     }
     
@@ -100,6 +133,7 @@ dta_gen = function (n, type, manifold.type, fac_sd = 1) {
 # Fix p = 10, r = 5, vary n = 50, 100, 200
 set.seed(5566)  
 num_sim = 100
+type = 1
 
 n = 50
 p = 10
@@ -109,7 +143,7 @@ FVUs = array(0, dim = c(num_sim, 3, 10))
 PEs = array(0, dim = c(num_sim, 3, 10))
 
 for (zz in 1:num_sim) {
-  dta = dta_gen(n + n_test, 1, "BWS", fac_sd = 2)
+  dta = dta_gen(n + n_test, type, "BWS", fac_sd = 2)
   RFM = main_BWS(dta$X, 10, verbose = F, test_size = n_test, mu_tol = 1e-3, h = 6)
   
   oracle_noise = 0
@@ -152,49 +186,8 @@ for (zz in 1:num_sim) {
   cat("iteration", zz, "\n")
 }
 
-cmPEs = colMeans(PEs, dims = 1)
-tsp = plot_time_series(x = data.frame(Time = c(1:10),
-                                      "Riemannian Factor Model" = cmPEs[1,],
-                                      "Linear Factor Model" = cmPEs[2,],
-                                      "Oracle prediction error" = cmPEs[3,],
-                                      check.names = F),
-                       time = "Time",
-                       series_cols = c("Riemannian Factor Model", "Linear Factor Model", "Oracle prediction error"),
-                       title = "",
-                       y_label = "(Euclidean) Prediction errors",
-                       x_label = "Number of factors",
-                       l_size = 0.5,
-                       p_size = 3.5,
-                       legend_title = "",
-                       legend_rows = 2,
-                       y_lim = c(0, 16))
-print(tsp)
-
-
-cmFVUs = colMeans(FVUs, dims = 1)
-tsp = plot_time_series(x = data.frame(Time = c(1:10),
-                                      "Riemannian Factor Model" = cmFVUs[1,],
-                                      "Linear Factor Model" = cmFVUs[2,],
-                                      "Oracle FVU" = cmFVUs[3,],
-                                      check.names = F),
-                       time = "Time",
-                       series_cols = c("Riemannian Factor Model", "Linear Factor Model", "Oracle FVU"),
-                       title = "",
-                       y_label = "Fraction of variance unexplained",
-                       x_label = "Number of factors",
-                       l_size = 0.5,
-                       p_size = 3.5,
-                       legend_title = "",
-                       legend_rows = 2,
-                       y_lim = c(0, 1))
-print(tsp)
-
-plot(RFM$pe_e, type = "b", main = paste("Prediction"),
-     ylim = c(0, max(c(RFM$pe_e, RFM$pe_e_linear))))
-lines(RFM$pe_e_linear, type = "b", col = 2)
-abline(h = oracle_noise, col = 3)
-
-
+plot_assist(PEs, "Prediction errors", paste("n =", n, "; p =", p), T)
+plot_assist(FVUs, "Fraction of errors unexplained", "", F)
 
 ################################
 
@@ -206,7 +199,7 @@ FVUs = array(0, dim = c(num_sim, 3, 10))
 PEs = array(0, dim = c(num_sim, 3, 10))
 
 for (zz in 1:num_sim) {
-  dta = dta_gen(n + n_test, 1, "BWS", fac_sd = 2)
+  dta = dta_gen(n + n_test, type, "BWS", fac_sd = 2)
   RFM = main_BWS(dta$X, 10, verbose = F, test_size = n_test, mu_tol = 1e-3, h = 6)
   
   oracle_noise = 0
@@ -249,48 +242,8 @@ for (zz in 1:num_sim) {
   cat("iteration", zz, "\n")
 }
 
-cmPEs = colMeans(PEs, dims = 1)
-tsp = plot_time_series(x = data.frame(Time = c(1:10),
-                                      "Riemannian Factor Model" = cmPEs[1,],
-                                      "Linear Factor Model" = cmPEs[2,],
-                                      "Oracle prediction error" = cmPEs[3,],
-                                      check.names = F),
-                       time = "Time",
-                       series_cols = c("Riemannian Factor Model", "Linear Factor Model", "Oracle prediction error"),
-                       title = "",
-                       y_label = "(Euclidean) Prediction errors",
-                       x_label = "Number of factors",
-                       l_size = 0.5,
-                       p_size = 3.5,
-                       legend_title = "",
-                       legend_rows = 2,
-                       y_lim = c(0, 16))
-print(tsp)
-
-
-cmFVUs = colMeans(FVUs, dims = 1)
-tsp = plot_time_series(x = data.frame(Time = c(1:10),
-                                      "Riemannian Factor Model" = cmFVUs[1,],
-                                      "Linear Factor Model" = cmFVUs[2,],
-                                      "Oracle FVU" = cmFVUs[3,],
-                                      check.names = F),
-                       time = "Time",
-                       series_cols = c("Riemannian Factor Model", "Linear Factor Model", "Oracle FVU"),
-                       title = "",
-                       y_label = "Fraction of variance unexplained",
-                       x_label = "Number of factors",
-                       l_size = 0.5,
-                       p_size = 3.5,
-                       legend_title = "",
-                       legend_rows = 2,
-                       y_lim = c(0, 1))
-print(tsp)
-
-plot(RFM$pe_e, type = "b", main = paste("Prediction"),
-     ylim = c(0, max(c(RFM$pe_e, RFM$pe_e_linear))))
-lines(RFM$pe_e_linear, type = "b", col = 2)
-abline(h = oracle_noise, col = 3)
-
+plot_assist(PEs, "Prediction errors", paste("n =", n, "; p =", p), T)
+plot_assist(FVUs, "Fraction of errors unexplained", "", F)
 
 
 ################################
@@ -303,7 +256,7 @@ FVUs = array(0, dim = c(num_sim, 3, 10))
 PEs = array(0, dim = c(num_sim, 3, 10))
 
 for (zz in 1:num_sim) {
-  dta = dta_gen(n + n_test, 1, "BWS", fac_sd = 2)
+  dta = dta_gen(n + n_test, type, "BWS", fac_sd = 2)
   RFM = main_BWS(dta$X, 10, verbose = F, test_size = n_test, mu_tol = 1e-3, h = 6)
   
   oracle_noise = 0
@@ -346,48 +299,45 @@ for (zz in 1:num_sim) {
   cat("iteration", zz, "\n")
 }
 
-cmPEs = colMeans(PEs, dims = 1)
-tsp = plot_time_series(x = data.frame(Time = c(1:10),
-                                      "Riemannian Factor Model" = cmPEs[1,],
-                                      "Linear Factor Model" = cmPEs[2,],
-                                      "Oracle prediction error" = cmPEs[3,],
-                                      check.names = F),
-                       time = "Time",
-                       series_cols = c("Riemannian Factor Model", "Linear Factor Model", "Oracle prediction error"),
-                       title = "",
-                       y_label = "(Euclidean) Prediction errors",
-                       x_label = "Number of factors",
-                       l_size = 0.5,
-                       p_size = 3.5,
-                       legend_title = "",
-                       legend_rows = 2,
-                       y_lim = c(0, 16))
-print(tsp)
+plot_assist(PEs, "Prediction errors", paste("n =", n, "; p =", p), T)
+plot_assist(FVUs, "Fraction of errors unexplained", "", F)
 
-
-cmFVUs = colMeans(FVUs, dims = 1)
-tsp = plot_time_series(x = data.frame(Time = c(1:10),
-                                      "Riemannian Factor Model" = cmFVUs[1,],
-                                      "Linear Factor Model" = cmFVUs[2,],
-                                      "Oracle FVU" = cmFVUs[3,],
-                                      check.names = F),
-                       time = "Time",
-                       series_cols = c("Riemannian Factor Model", "Linear Factor Model", "Oracle FVU"),
-                       title = "",
-                       y_label = "Fraction of variance unexplained",
-                       x_label = "Number of factors",
-                       l_size = 0.5,
-                       p_size = 3.5,
-                       legend_title = "",
-                       legend_rows = 2,
-                       y_lim = c(0, 1))
-print(tsp)
-
-plot(RFM$pe_e, type = "b", main = paste("Prediction"),
-     ylim = c(0, max(c(RFM$pe_e, RFM$pe_e_linear))))
-lines(RFM$pe_e_linear, type = "b", col = 2)
-abline(h = oracle_noise, col = 3)
-
+# cmPEs = colMeans(PEs, dims = 1)
+# tsp = plot_time_series(x = data.frame(Time = c(1:10),
+#                                       "Riemannian Factor Model" = cmPEs[1,],
+#                                       "Linear Factor Model" = cmPEs[2,],
+#                                       "Oracle prediction error" = cmPEs[3,],
+#                                       check.names = F),
+#                        time = "Time",
+#                        series_cols = c("Riemannian Factor Model", "Linear Factor Model", "Oracle prediction error"),
+#                        title = "",
+#                        y_label = "(Euclidean) Prediction errors",
+#                        x_label = "Number of factors",
+#                        l_size = 0.5,
+#                        p_size = 3.5,
+#                        legend_title = "",
+#                        legend_rows = 2,
+#                        y_lim = c(0, 16))
+# print(tsp)
+# 
+# 
+# cmFVUs = colMeans(FVUs, dims = 1)
+# tsp = plot_time_series(x = data.frame(Time = c(1:10),
+#                                       "Riemannian Factor Model" = cmFVUs[1,],
+#                                       "Linear Factor Model" = cmFVUs[2,],
+#                                       "Oracle FVU" = cmFVUs[3,],
+#                                       check.names = F),
+#                        time = "Time",
+#                        series_cols = c("Riemannian Factor Model", "Linear Factor Model", "Oracle FVU"),
+#                        title = "",
+#                        y_label = "Fraction of variance unexplained",
+#                        x_label = "Number of factors",
+#                        l_size = 0.5,
+#                        p_size = 3.5,
+#                        legend_title = "",
+#                        legend_rows = 2,
+#                        y_lim = c(0, 1))
+# print(tsp)
 
 
 ################################
