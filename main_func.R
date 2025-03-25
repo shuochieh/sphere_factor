@@ -272,6 +272,7 @@ main_BWS = function (x, r, test_size = 0, h = 6, mu_tol = 1e-3, verbose = FALSE)
   
   # compare with linear factor model
   FVU_e_linear = rep(0, r)
+  FVU_g_linear = rep(0, r)
   spd_linear = rep(0, r)
 
   temp_x = array(NA, dim = c(n, p * (p + 1) / 2))
@@ -284,17 +285,21 @@ main_BWS = function (x, r, test_size = 0, h = 6, mu_tol = 1e-3, verbose = FALSE)
   for (k in 1:r) {
     z_hat = predict_fm(V_linear[,1:k], model_linear$mean, temp_x)
     x_hat = array(NA, dim = c(n, p, p))
+    x_hat_proj = array(NA, dim = c(n, p, p))
     
     for (i in 1:n) {
       x_hat[i,,] = vector_to_symmetric(z_hat[i,], p)
+      x_hat_proj[i,,] = project_to_SPD(x_hat[i,,], epsilon = 1e-9)
     }
     
     FVU_e_linear[k] = sum(apply(x_hat - x, MARGIN = 1, norm, "F")^2) / TV_e
+    FVU_g_linear[k] = sum(geod_BWS(x_hat_proj, x)^2) / TV_g
     spd_linear[k] = prod(apply(x_hat, MARGIN = 1, is.spd))
   }
 
   if (test_size > 0) {
     pred_err_e_linear = rep(0, r)
+    pred_err_g_linear = rep(0, r)
     spd_linear_test = rep(0, r)
     temp_x_test = array(NA, dim = c(n_test, p * (p + 1) /2))
     for (i in 1:n_test) {
@@ -302,19 +307,26 @@ main_BWS = function (x, r, test_size = 0, h = 6, mu_tol = 1e-3, verbose = FALSE)
     }
     
     x_hat_LFM = array(NA, dim = c(n_test, r, p, p))
+    x_hat_LFM_proj = array(NA, dim = c(n_test, r, p, p))
     for (k in 1:r) {
       z_hat = predict_fm(V_linear[,1:k], model_linear$mean, temp_x_test)
       x_hat = array(NA, dim = c(n_test, p, p))
+      x_hat_proj = array(NA, dim = c(n_test, p, p))
       
       for (i in 1:n_test) {
         x_hat[i,,] = vector_to_symmetric(z_hat[i,], p)
+        x_hat_proj[i,,] = project_to_SPD(x_hat[i,,], 1e-9)
       }
       
       pred_err_e_linear[k] = sum(apply(x_test - x_hat, MARGIN = 1, norm, "F")^2)
       spd_linear_test[k] = prod(apply(x_hat, MARGIN = 1, is.spd))
       x_hat_LFM[,k,,] = x_hat
+      x_hat_LFM_proj[,k,,] = x_hat_proj
+      
+      pred_err_g_linear[k] = sum(geod_BWS(x_hat_proj, x_test)^2)
     }
     pred_err_e_linear = sqrt(pred_err_e_linear / n_test)
+    pred_err_g_linear = sqrt(pred_err_g_linear / n_test)
   }
   
   if (test_size > 0) {
@@ -323,18 +335,21 @@ main_BWS = function (x, r, test_size = 0, h = 6, mu_tol = 1e-3, verbose = FALSE)
                  "pe_g" = pred_err_g, "pe_e" = pred_err_e,
                  "V" = V, "Factors" = Factors,
                  "x_hat_RFM" = x_hat_RFM,
-                 "spd_linear" = spd_linear, "FVU_e_linear" = FVU_e_linear, 
-                 "spd_linear_test" = spd_linear_test, "pe_e_linear" = pred_err_e_linear,
+                 "spd_linear" = spd_linear, 
+                 "FVU_e_linear" = FVU_e_linear, "FVU_g_linear" = FVU_g_linear,
+                 "spd_linear_test" = spd_linear_test, 
+                 "pe_e_linear" = pred_err_e_linear, "pe_g_linear" = pred_err_g_linear,
                  "V_linear" = V_linear,
                  "x_hat_LFM" = x_hat_LFM,
-                 "TV_e" = TV_e))
+                 "TV_e" = TV_e, "TV_g" = TV_g))
   } 
   return (list("mu_hat" = mu_hat,
                "FVU_g" = FVU_g, "FVU_e" = FVU_e, 
                "V" = V, "Factors" = Factors,
-               "spd_linear" = spd_linear, "FVU_e_linear" = FVU_e_linear, 
+               "spd_linear" = spd_linear, 
+               "FVU_e_linear" = FVU_e_linear, "FVU_g_linear" = FVU_g_linear,
                "V_linear" = V_linear,
-               "TV_e" = TV_e))
+               "TV_e" = TV_e, "TV_g" = TV_g))
 }
 
 main_uneven_sphere = function (x, r, test_size = 0, h = 6) {

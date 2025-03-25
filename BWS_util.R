@@ -131,6 +131,16 @@ is.spd = function (x, tol = 1e-8) {
   }
 }
 
+project_to_SPD <- function(A, epsilon = 0) {
+  # epsilon is to ensure positive-definiteness (ocassionally used)
+  
+  eig <- eigen(A)
+  eig$values[eig$values < epsilon] <- epsilon
+  A_SPD <- eig$vectors %*% diag(eig$values) %*% t(eig$vectors)
+  
+  return(A_SPD)
+}
+
 mean_on_BWS = function (X, tau = 0.1, tol = 1e-4, max.iter = 1000,
                              verbose = FALSE) {
   # X: (n by ...) data

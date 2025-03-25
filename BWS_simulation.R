@@ -42,56 +42,106 @@ plot_time_series <- function(x, time = NULL, series_cols = NULL,
   return (p)
 }
 
-plot_assist = function (x, label.y, title = "", legend.if = FALSE) {
-  Labels = c("Riemannian factor model", "Linear factor model", "Oracle prediction error")
-  colors = c("red", "blue", "green")
-  percentiles = array(NA, dim = c(3, 10, 2))
-  for (i in 1:3) {
+plot_assist = function (x, label.y, 
+                        title = "", 
+                        colors = NULL,
+                        Labels = NULL, 
+                        legend.if = FALSE) {
+  n_method = length(Labels)
+  if (is.null(colors)) {
+    colors = c(4, 2:n_method)
+  }
+  percentiles = array(NA, dim = c(n_method, 10, 2))
+  for (i in 1:n_method) {
     percentiles[i,,] = cbind(apply(x[,i,], 2, quantile, 0.05), apply(x[,i,], 2, quantile, 0.95))
   }
   means = colMeans(x, dims = 1)
   
   plot(NA, xlim = range(1:10), ylim = c(0, max(percentiles)), 
-       xlab = "Number of factors", ylab = label.y, main = title)
-  for (i in 1:3) {
+       xlab = "Number of factors", 
+       ylab = label.y, 
+       main = title)
+  
+  for (i in 1:n_method) {
     polygon(c(1:10, 10:1),
             c(percentiles[i,,1], rev(percentiles[i,,2])),
             col = adjustcolor(colors[i], alpha.f = 0.2), border = NA)
     lines(1:10, means[i,], col = colors[i], lwd = 2, type = "b",
           pch = i - 1)
   }
+  
   if (legend.if) {
     legend("topright", legend = Labels, col = colors, lwd = 2, pch = c(0, 1, 2), 
            bty = "n")
   }
+  
+  # if (oracle.if) {
+  #   colors = c("red", "blue", "green")
+  #   percentiles = array(NA, dim = c(3, 10, 2))
+  #   for (i in 1:3) {
+  #     percentiles[i,,] = cbind(apply(x[,i,], 2, quantile, 0.05), apply(x[,i,], 2, quantile, 0.95))
+  #   }
+  #   means = colMeans(x, dims = 1)
+  #   
+  #   plot(NA, xlim = range(1:10), ylim = c(0, max(percentiles)), 
+  #        xlab = "Number of factors", ylab = label.y, main = title)
+  #   for (i in 1:3) {
+  #     polygon(c(1:10, 10:1),
+  #             c(percentiles[i,,1], rev(percentiles[i,,2])),
+  #             col = adjustcolor(colors[i], alpha.f = 0.2), border = NA)
+  #     lines(1:10, means[i,], col = colors[i], lwd = 2, type = "b",
+  #           pch = i - 1)
+  #   }
+  # } else {
+  #   colors = c("red", "blue")
+  #   percentiles = array(NA, dim = c(2, 10, 2))
+  #   for (i in 1:2) {
+  #     percentiles[i,,] = cbind(apply(x[,i,], 2, quantile, 0.05), apply(x[,i,], 2, quantile, 0.95))
+  #   }
+  #   means = colMeans(x, dims = 1)
+  #   
+  #   plot(NA, xlim = range(1:10), ylim = c(0, max(percentiles)), 
+  #        xlab = "Number of factors", ylab = label.y, main = title)
+  #   for (i in 1:2) {
+  #     polygon(c(1:10, 10:1),
+  #             c(percentiles[i,,1], rev(percentiles[i,,2])),
+  #             col = adjustcolor(colors[i], alpha.f = 0.2), border = NA)
+  #     lines(1:10, means[i,], col = colors[i], lwd = 2, type = "b",
+  #           pch = i - 1)
+  #   }
+  #   
+  # }
 }
 
-dta_gen = function (n, type, manifold.type, fac_sd = 1) {
+dta_gen = function (n, type) {
   # type: specifications
-  # manifold.type: "BWS" or "Sphere"
-  
+
   if (type == 1) {
     # BWS space p by p SPD matrices
+    manifold.type = "BWS"
     p = 10
     r = 5
-    inj_noise = 0.0
     fac_noise = 2.0
-    alpha = 0.8 # AR coefficient for factor process
+    fac_sd = 2.0
+    alpha = 0.8          # AR coefficient for factor process
+    
+    mu = diag(3, p)
   }
   
   if (type == 2) {
     # BWS space p by p SPD matrices
+    manifold.type = "BWS"
     p = 10
     r = 5
-    inj_noise = 0.5
-    fac_noise = 1.0
+    fac_noise = 2.0
+    fac_sd = 2.0
     alpha = 0.8 # AR coefficient for factor process
+    
+    mu = 20 * toeplitz(0.6^c(0:(p - 1)))
   }
   
   
   if (manifold.type == "BWS") {
-    mu_P = matrix(rnorm(500 * p), ncol = p)
-    mu = 3 * (t(mu_P) %*% mu_P / 500) 
 
     Factors = array(0, dim = c(n + 100, r))
     for (t in 2:(n + 100)) {
@@ -110,16 +160,14 @@ dta_gen = function (n, type, manifold.type, fac_sd = 1) {
                                            sd = fac_noise * sqrt(2 / (p * (p + 1))))
     }
 
-    X_nless = array(NA, dim = c(n, p, p))
     X = array(NA, dim = c(n, p, p))
+    X_nless = array(NA, dim = c(n, p, p))
     for (t in 1:n) {
       V = vector_to_symmetric(Z[t,], p)
-      X_nless[t,,] = Exp_BWS_core(V, mu)
+      X[t,,] = Exp_BWS_core(V, mu)
       
-      noise_P = rnorm(p * (p + 1) / 2, sd = inj_noise * sqrt(2 / (p * (p + 1))))
-      noise = vector_to_symmetric(noise_P, p)
-
-      X[t,,] = Exp_BWS_core(noise, X_nless[t,,])
+      V_nless = vector_to_symmetric(Z_nless[t,], p)
+      X_nless[t,,] = Exp_BWS_core(V_nless, mu)
     }
     
     return (list("X" = X, "X_nless" = X_nless, "Z" = Z, "Z_nless" = Z_nless, 
@@ -133,211 +181,410 @@ dta_gen = function (n, type, manifold.type, fac_sd = 1) {
 # Fix p = 10, r = 5, vary n = 50, 100, 200
 set.seed(5566)  
 num_sim = 100
-type = 1
+type = 2
 
 n = 50
 p = 10
 n_test = 200
 
+results = vector("list", length = num_sim)
+
 FVUs = array(0, dim = c(num_sim, 3, 10))
+gFVUs = array(0, dim = c(num_sim, 3, 10))
+
 PEs = array(0, dim = c(num_sim, 3, 10))
+gPEs = array(0, dim = c(num_sim, 3, 10))
+gfit = array(0, dim = c(num_sim, 10))      # only for RFM
+
+all_gfit = array(NA, dim = c(num_sim, 3, 10))
 
 for (zz in 1:num_sim) {
-  dta = dta_gen(n + n_test, type, "BWS", fac_sd = 2)
+  dta = dta_gen(n + n_test, type)
   RFM = main_BWS(dta$X, 10, verbose = F, test_size = n_test, mu_tol = 1e-3, h = 6)
   
-  oracle_noise = 0
+  results[[zz]] = RFM
+  
+  oracle_PE = 0
   for (i in 1:n_test) {
-    oracle_noise = oracle_noise + 
-      sum((dta$X_nless[n + i,,] - Exp_BWS_core(vector_to_symmetric(dta$Z_nless[i + n,], p), dta$mu)))^2
+    oracle_PE = oracle_PE +
+      sum((dta$X[n + i,,] - dta$X_nless[n + i,,])^2)
   }
-  oracle_noise = sqrt(oracle_noise / n_test)
+  oracle_PE = sqrt(oracle_PE / n_test)
+  PEs[zz,1,] = RFM$pe_e
+  PEs[zz,2,] = RFM$pe_e_linear
+  PEs[zz,3,] = oracle_PE
   
-  pred_err_RFM = rep(0, 10)
-  for (i in 1:10) {
-    for (t in 1:n_test) {
-      pred_err_RFM[i] = pred_err_RFM[i] + norm(RFM$x_hat_RFM[t,i,,] - dta$X_nless[-c(1:n),,][t,,], "F")^2
-    }
+  oracle_gPE = 0
+  for (i in 1:n_test) {
+    oracle_gPE = oracle_gPE +
+      geod_BWS_core(dta$X[n + i,,], dta$X_nless[n + i,,])^2
   }
-  pred_err_RFM = sqrt(pred_err_RFM / n_test)
-  
-  pred_err_LFM = rep(0, 10)
-  for (i in 1:10) {
-    for (t in 1:n_test) {
-      pred_err_LFM[i] = pred_err_LFM[i] + norm(RFM$x_hat_LFM[t,i,,] - dta$X_nless[-c(1:n),,][t,,], "F")^2
-    }
-  }
-  pred_err_LFM = sqrt(pred_err_LFM / n_test)
-  
-  PEs[zz,1,] = pred_err_RFM
-  PEs[zz,2,] = pred_err_LFM
-  PEs[zz,3,] = oracle_noise
-  
-  oracle_noise = 0
+  oracle_gPE = sqrt(oracle_gPE / n_test)
+  gPEs[zz,1,] = RFM$pe_g
+  gPEs[zz,2,] = RFM$pe_g_linear
+  gPEs[zz,3,] = oracle_gPE
+
+  oracle_FVU = 0
   for (i in 1:n) {
-    oracle_noise = oracle_noise + 
-      sum((dta$X[i,,] - Exp_BWS_core(vector_to_symmetric(dta$Z_nless[i,], p), dta$mu)))^2
+    oracle_FVU = oracle_FVU + 
+      sum((dta$X[i,,] - dta$X_nless[i,,])^2)
   }
   
+  oracle_gFVU = 0
+  for (i in 1:n) {
+    oracle_gFVU = oracle_gFVU + 
+      geod_BWS_core(dta$X[i,,], dta$X_nless[i,,])^2
+  }
+
   FVUs[zz,1,] = RFM$FVU_e
   FVUs[zz,2,] = RFM$FVU_e_linear
-  FVUs[zz,3,] = oracle_noise / RFM$TV_e
+  FVUs[zz,3,] = oracle_FVU / RFM$TV_e
   
+  gFVUs[zz,1,] = RFM$FVU_g
+  gFVUs[zz,2,] = RFM$FVU_g_linear
+  gFVUs[zz,3,] = oracle_gFVU / RFM$TV_g
+  
+  for (i in 1:10) {
+    A_hat = RFM$V[,1:i]
+    for (t in 1:n_test) {
+      xhat = Exp_BWS_core(vector_to_symmetric(A_hat %*% t(A_hat) %*% dta$Z_nless[n + t,], p),
+                          RFM$mu_hat)
+      gfit[zz,i] = gfit[zz,i] + geod_BWS_core(xhat, dta$X_nless[n + t,,])^2
+    }
+  }
+  if (zz == num_sim) {
+    gfit = sqrt(gfit / n_test)
+  }
   cat("iteration", zz, "\n")
 }
 
-plot_assist(PEs, "Prediction errors", paste("n =", n, "; p =", p), T)
-plot_assist(FVUs, "Fraction of errors unexplained", "", F)
+all_gfit[,1,] = gfit
+
+pdf(paste0("./save/fPE_n", n, "_type", type, ".pdf"), width = 8, height = 6)
+plot_assist(x = Re(PEs), 
+            label.y = "Pseudo-prediction errors (Frobenius distance)",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = T)
+dev.off()
+pdf(paste0("./save/gPE_n", n, "_type", type, ".pdf"), width = 8, height = 6)
+plot_assist(x = Re(gPEs), 
+            label.y = "Pseudo-prediction errors (geodesic distance)",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = T)
+dev.off()
+pdf(paste0("./save/fFVU_n", n, "_type", type, ".pdf"), width = 8, height = 6)
+plot_assist(x = FVUs, 
+            label.y = "Fraction of (Euclidean) variance unexplained",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = T)
+dev.off()
+pdf(paste0("./save/gFVU_n", n, "_type", type, ".pdf"), width = 8, height = 6)
+plot_assist(x = Re(gFVUs), 
+            label.y = "Fraction of (geodesic) variance unexplained",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = T)
+dev.off()
+
+
+pdf(paste0("./save/fPE_n", n, "_type", type, "_nolegend.pdf"), width = 8, height = 6)
+plot_assist(x = Re(PEs), 
+            label.y = "Pseudo-prediction errors (Frobenius distance)",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = F)
+dev.off()
+pdf(paste0("./save/gPE_n", n, "_type", type, "_nolegend.pdf"), width = 8, height = 6)
+plot_assist(x = Re(gPEs), 
+            label.y = "Pseudo-prediction errors (geodesic distance)",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = F)
+dev.off()
+pdf(paste0("./save/fFVU_n", n, "_type", type, "_nolegend.pdf"), width = 8, height = 6)
+plot_assist(x = FVUs, 
+            label.y = "Fraction of (Euclidean) variance unexplained",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = F)
+dev.off()
+pdf(paste0("./save/gFVU_n", n, "_type", type, "_nolegend.pdf"), width = 8, height = 6)
+plot_assist(x = Re(gFVUs), 
+            label.y = "Fraction of (geodesic) variance unexplained",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = F)
+dev.off()
+
+save(results, file = paste0("./save/results_n", n, "_type", type, ".RData"))
 
 ################################
 
 n = 100
-p = 10
 n_test = 200
 
+results = vector("list", length = num_sim)
+
 FVUs = array(0, dim = c(num_sim, 3, 10))
+gFVUs = array(0, dim = c(num_sim, 3, 10))
+
 PEs = array(0, dim = c(num_sim, 3, 10))
+gPEs = array(0, dim = c(num_sim, 3, 10))
+gfit = array(0, dim = c(num_sim, 10))      # only for RFM
 
 for (zz in 1:num_sim) {
-  dta = dta_gen(n + n_test, type, "BWS", fac_sd = 2)
+  dta = dta_gen(n + n_test, type)
   RFM = main_BWS(dta$X, 10, verbose = F, test_size = n_test, mu_tol = 1e-3, h = 6)
   
-  oracle_noise = 0
+  results[[zz]] = RFM
+  
+  oracle_PE = 0
   for (i in 1:n_test) {
-    oracle_noise = oracle_noise + 
-      sum((dta$X_nless[n + i,,] - Exp_BWS_core(vector_to_symmetric(dta$Z_nless[i + n,], p), dta$mu)))^2
+    oracle_PE = oracle_PE +
+      sum((dta$X[n + i,,] - dta$X_nless[n + i,,])^2)
   }
-  oracle_noise = sqrt(oracle_noise / n_test)
+  oracle_PE = sqrt(oracle_PE / n_test)
+  PEs[zz,1,] = RFM$pe_e
+  PEs[zz,2,] = RFM$pe_e_linear
+  PEs[zz,3,] = oracle_PE
   
-  pred_err_RFM = rep(0, 10)
-  for (i in 1:10) {
-    for (t in 1:n_test) {
-      pred_err_RFM[i] = pred_err_RFM[i] + norm(RFM$x_hat_RFM[t,i,,] - dta$X_nless[-c(1:n),,][t,,], "F")^2
-    }
+  oracle_gPE = 0
+  for (i in 1:n_test) {
+    oracle_gPE = oracle_gPE +
+      geod_BWS_core(dta$X[n + i,,], dta$X_nless[n + i,,])^2
   }
-  pred_err_RFM = sqrt(pred_err_RFM / n_test)
+  oracle_gPE = sqrt(oracle_gPE / n_test)
+  gPEs[zz,1,] = RFM$pe_g
+  gPEs[zz,2,] = RFM$pe_g_linear
+  gPEs[zz,3,] = oracle_gPE
   
-  pred_err_LFM = rep(0, 10)
-  for (i in 1:10) {
-    for (t in 1:n_test) {
-      pred_err_LFM[i] = pred_err_LFM[i] + norm(RFM$x_hat_LFM[t,i,,] - dta$X_nless[-c(1:n),,][t,,], "F")^2
-    }
-  }
-  pred_err_LFM = sqrt(pred_err_LFM / n_test)
-  
-  PEs[zz,1,] = pred_err_RFM
-  PEs[zz,2,] = pred_err_LFM
-  PEs[zz,3,] = oracle_noise
-  
-  oracle_noise = 0
+  oracle_FVU = 0
   for (i in 1:n) {
-    oracle_noise = oracle_noise + 
-      sum((dta$X[i,,] - Exp_BWS_core(vector_to_symmetric(dta$Z_nless[i,], p), dta$mu)))^2
+    oracle_FVU = oracle_FVU + 
+      sum((dta$X[i,,] - dta$X_nless[i,,])^2)
+  }
+  
+  oracle_gFVU = 0
+  for (i in 1:n) {
+    oracle_gFVU = oracle_gFVU + 
+      geod_BWS_core(dta$X[i,,], dta$X_nless[i,,])^2
   }
   
   FVUs[zz,1,] = RFM$FVU_e
   FVUs[zz,2,] = RFM$FVU_e_linear
-  FVUs[zz,3,] = oracle_noise / RFM$TV_e
+  FVUs[zz,3,] = oracle_FVU / RFM$TV_e
   
+  gFVUs[zz,1,] = RFM$FVU_g
+  gFVUs[zz,2,] = RFM$FVU_g_linear
+  gFVUs[zz,3,] = oracle_gFVU / RFM$TV_g
+  
+  for (i in 1:10) {
+    A_hat = RFM$V[,1:i]
+    for (t in 1:n_test) {
+      xhat = Exp_BWS_core(vector_to_symmetric(A_hat %*% t(A_hat) %*% dta$Z_nless[n + t,], p),
+                          RFM$mu_hat)
+      gfit[zz,i] = gfit[zz,i] + geod_BWS_core(xhat, dta$X_nless[n + t,,])^2
+    }
+  }
+  if (zz == num_sim) {
+    gfit = sqrt(gfit / n_test)
+  }
   cat("iteration", zz, "\n")
 }
 
-plot_assist(PEs, "Prediction errors", paste("n =", n, "; p =", p), T)
-plot_assist(FVUs, "Fraction of errors unexplained", "", F)
+all_gfit[,2,] = gfit
 
+pdf(paste0("./save/fPE_n", n, "_type", type, ".pdf"), width = 8, height = 6)
+plot_assist(x = Re(PEs), 
+            label.y = "Pseudo-prediction errors (Frobenius distance)",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = T)
+dev.off()
+pdf(paste0("./save/gPE_n", n, "_type", type, ".pdf"), width = 8, height = 6)
+plot_assist(x = Re(gPEs), 
+            label.y = "Pseudo-prediction errors (geodesic distance)",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = T)
+dev.off()
+pdf(paste0("./save/fFVU_n", n, "_type", type, ".pdf"), width = 8, height = 6)
+plot_assist(x = FVUs, 
+            label.y = "Fraction of (Euclidean) variance unexplained",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = T)
+dev.off()
+pdf(paste0("./save/gFVU_n", n, "_type", type, ".pdf"), width = 8, height = 6)
+plot_assist(x = Re(gFVUs), 
+            label.y = "Fraction of (geodesic) variance unexplained",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = T)
+dev.off()
+
+
+pdf(paste0("./save/fPE_n", n, "_type", type, "_nolegend.pdf"), width = 8, height = 6)
+plot_assist(x = Re(PEs), 
+            label.y = "Pseudo-prediction errors (Frobenius distance)",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = F)
+dev.off()
+pdf(paste0("./save/gPE_n", n, "_type", type, "_nolegend.pdf"), width = 8, height = 6)
+plot_assist(x = Re(gPEs), 
+            label.y = "Pseudo-prediction errors (geodesic distance)",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = F)
+dev.off()
+pdf(paste0("./save/fFVU_n", n, "_type", type, "_nolegend.pdf"), width = 8, height = 6)
+plot_assist(x = FVUs, 
+            label.y = "Fraction of (Euclidean) variance unexplained",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = F)
+dev.off()
+pdf(paste0("./save/gFVU_n", n, "_type", type, "_nolegend.pdf"), width = 8, height = 6)
+plot_assist(x = Re(gFVUs), 
+            label.y = "Fraction of (geodesic) variance unexplained",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = F)
+dev.off()
+
+save(results, file = paste0("./save/results_n", n, "_type", type, ".RData"))
 
 ################################
 
 n = 200
-p = 10
 n_test = 200
 
+results = vector("list", length = num_sim)
+
 FVUs = array(0, dim = c(num_sim, 3, 10))
+gFVUs = array(0, dim = c(num_sim, 3, 10))
+
 PEs = array(0, dim = c(num_sim, 3, 10))
+gPEs = array(0, dim = c(num_sim, 3, 10))
+gfit = array(0, dim = c(num_sim, 10))      # only for RFM
 
 for (zz in 1:num_sim) {
-  dta = dta_gen(n + n_test, type, "BWS", fac_sd = 2)
+  dta = dta_gen(n + n_test, type)
   RFM = main_BWS(dta$X, 10, verbose = F, test_size = n_test, mu_tol = 1e-3, h = 6)
   
-  oracle_noise = 0
+  results[[zz]] = RFM
+  
+  oracle_PE = 0
   for (i in 1:n_test) {
-    oracle_noise = oracle_noise + 
-      sum((dta$X_nless[n + i,,] - Exp_BWS_core(vector_to_symmetric(dta$Z_nless[i + n,], p), dta$mu)))^2
+    oracle_PE = oracle_PE +
+      sum((dta$X[n + i,,] - dta$X_nless[n + i,,])^2)
   }
-  oracle_noise = sqrt(oracle_noise / n_test)
+  oracle_PE = sqrt(oracle_PE / n_test)
+  PEs[zz,1,] = RFM$pe_e
+  PEs[zz,2,] = RFM$pe_e_linear
+  PEs[zz,3,] = oracle_PE
   
-  pred_err_RFM = rep(0, 10)
-  for (i in 1:10) {
-    for (t in 1:n_test) {
-      pred_err_RFM[i] = pred_err_RFM[i] + norm(RFM$x_hat_RFM[t,i,,] - dta$X_nless[-c(1:n),,][t,,], "F")^2
-    }
+  oracle_gPE = 0
+  for (i in 1:n_test) {
+    oracle_gPE = oracle_gPE +
+      geod_BWS_core(dta$X[n + i,,], dta$X_nless[n + i,,])^2
   }
-  pred_err_RFM = sqrt(pred_err_RFM / n_test)
+  oracle_gPE = sqrt(oracle_gPE / n_test)
+  gPEs[zz,1,] = RFM$pe_g
+  gPEs[zz,2,] = RFM$pe_g_linear
+  gPEs[zz,3,] = oracle_gPE
   
-  pred_err_LFM = rep(0, 10)
-  for (i in 1:10) {
-    for (t in 1:n_test) {
-      pred_err_LFM[i] = pred_err_LFM[i] + norm(RFM$x_hat_LFM[t,i,,] - dta$X_nless[-c(1:n),,][t,,], "F")^2
-    }
-  }
-  pred_err_LFM = sqrt(pred_err_LFM / n_test)
-  
-  PEs[zz,1,] = pred_err_RFM
-  PEs[zz,2,] = pred_err_LFM
-  PEs[zz,3,] = oracle_noise
-  
-  oracle_noise = 0
+  oracle_FVU = 0
   for (i in 1:n) {
-    oracle_noise = oracle_noise + 
-      sum((dta$X[i,,] - Exp_BWS_core(vector_to_symmetric(dta$Z_nless[i,], p), dta$mu)))^2
+    oracle_FVU = oracle_FVU + 
+      sum((dta$X[i,,] - dta$X_nless[i,,])^2)
+  }
+  
+  oracle_gFVU = 0
+  for (i in 1:n) {
+    oracle_gFVU = oracle_gFVU + 
+      geod_BWS_core(dta$X[i,,], dta$X_nless[i,,])^2
   }
   
   FVUs[zz,1,] = RFM$FVU_e
   FVUs[zz,2,] = RFM$FVU_e_linear
-  FVUs[zz,3,] = oracle_noise / RFM$TV_e
+  FVUs[zz,3,] = oracle_FVU / RFM$TV_e
   
+  gFVUs[zz,1,] = RFM$FVU_g
+  gFVUs[zz,2,] = RFM$FVU_g_linear
+  gFVUs[zz,3,] = oracle_gFVU / RFM$TV_g
+  
+  for (i in 1:10) {
+    A_hat = RFM$V[,1:i]
+    for (t in 1:n_test) {
+      xhat = Exp_BWS_core(vector_to_symmetric(A_hat %*% t(A_hat) %*% dta$Z_nless[n + t,], p),
+                          RFM$mu_hat)
+      gfit[zz,i] = gfit[zz,i] + geod_BWS_core(xhat, dta$X_nless[n + t,,])^2
+    }
+  }
+  if (zz == num_sim) {
+    gfit = sqrt(gfit / n_test)
+  }
   cat("iteration", zz, "\n")
 }
 
-plot_assist(PEs, "Prediction errors", paste("n =", n, "; p =", p), T)
-plot_assist(FVUs, "Fraction of errors unexplained", "", F)
+all_gfit[,3,] = gfit
 
-# cmPEs = colMeans(PEs, dims = 1)
-# tsp = plot_time_series(x = data.frame(Time = c(1:10),
-#                                       "Riemannian Factor Model" = cmPEs[1,],
-#                                       "Linear Factor Model" = cmPEs[2,],
-#                                       "Oracle prediction error" = cmPEs[3,],
-#                                       check.names = F),
-#                        time = "Time",
-#                        series_cols = c("Riemannian Factor Model", "Linear Factor Model", "Oracle prediction error"),
-#                        title = "",
-#                        y_label = "(Euclidean) Prediction errors",
-#                        x_label = "Number of factors",
-#                        l_size = 0.5,
-#                        p_size = 3.5,
-#                        legend_title = "",
-#                        legend_rows = 2,
-#                        y_lim = c(0, 16))
-# print(tsp)
-# 
-# 
-# cmFVUs = colMeans(FVUs, dims = 1)
-# tsp = plot_time_series(x = data.frame(Time = c(1:10),
-#                                       "Riemannian Factor Model" = cmFVUs[1,],
-#                                       "Linear Factor Model" = cmFVUs[2,],
-#                                       "Oracle FVU" = cmFVUs[3,],
-#                                       check.names = F),
-#                        time = "Time",
-#                        series_cols = c("Riemannian Factor Model", "Linear Factor Model", "Oracle FVU"),
-#                        title = "",
-#                        y_label = "Fraction of variance unexplained",
-#                        x_label = "Number of factors",
-#                        l_size = 0.5,
-#                        p_size = 3.5,
-#                        legend_title = "",
-#                        legend_rows = 2,
-#                        y_lim = c(0, 1))
-# print(tsp)
+pdf(paste0("./save/fPE_n", n, "_type", type, ".pdf"), width = 8, height = 6)
+plot_assist(x = Re(PEs), 
+            label.y = "Pseudo-prediction errors (Frobenius distance)",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = T)
+dev.off()
+pdf(paste0("./save/gPE_n", n, "_type", type, ".pdf"), width = 8, height = 6)
+plot_assist(x = Re(gPEs), 
+            label.y = "Pseudo-prediction errors (geodesic distance)",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = T)
+dev.off()
+pdf(paste0("./save/fFVU_n", n, "_type", type, ".pdf"), width = 8, height = 6)
+plot_assist(x = FVUs, 
+            label.y = "Fraction of (Euclidean) variance unexplained",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = T)
+dev.off()
+pdf(paste0("./save/gFVU_n", n, "_type", type, ".pdf"), width = 8, height = 6)
+plot_assist(x = Re(gFVUs), 
+            label.y = "Fraction of (geodesic) variance unexplained",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = T)
+dev.off()
 
+
+pdf(paste0("./save/fPE_n", n, "_type", type, "_nolegend.pdf"), width = 8, height = 6)
+plot_assist(x = Re(PEs), 
+            label.y = "Pseudo-prediction errors (Frobenius distance)",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = F)
+dev.off()
+pdf(paste0("./save/gPE_n", n, "_type", type, "_nolegend.pdf"), width = 8, height = 6)
+plot_assist(x = Re(gPEs), 
+            label.y = "Pseudo-prediction errors (geodesic distance)",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = F)
+dev.off()
+pdf(paste0("./save/fFVU_n", n, "_type", type, "_nolegend.pdf"), width = 8, height = 6)
+plot_assist(x = FVUs, 
+            label.y = "Fraction of (Euclidean) variance unexplained",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = F)
+dev.off()
+pdf(paste0("./save/gFVU_n", n, "_type", type, "_nolegend.pdf"), width = 8, height = 6)
+plot_assist(x = Re(gFVUs), 
+            label.y = "Fraction of (geodesic) variance unexplained",
+            Labels = c("Riemannian factor model", "Linear factor model", "Oracle"),
+            legend.if = F)
+dev.off()
+
+save(results, file = paste0("./save/results_n", n, "_type", type, ".RData"))
 
 ################################
+pdf(paste0("./save/gfit", "_type", type, ".pdf"), width = 8, height = 6)
+plot_assist(x = Re(all_gfit), 
+            label.y = "Goodness-of-fit (geodesic distance)",
+            colors = colors()[c(468, 510, 552)],
+            Labels = c("n = 50", "n = 100", "n = 200"),
+            legend.if = T)
+dev.off()
+pdf(paste0("./save/gfit", "_type", type, "_nolegend.pdf"), width = 8, height = 6)
+plot_assist(x = Re(all_gfit), 
+            label.y = "Goodness-of-fit (geodesic distance)",
+            colors = colors()[c(468, 510, 552)],
+            Labels = c("n = 50", "n = 100", "n = 200"),
+            legend.if = F)
+dev.off()
+
+
