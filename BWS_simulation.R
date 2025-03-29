@@ -121,25 +121,72 @@ dta_gen = function (n, type) {
     manifold.type = "BWS"
     p = 10
     r = 5
-    fac_noise = 2.0
-    fac_sd = 2.0
+    fac_noise = sqrt(15)
+    fac_sd = 2.0         # SNR~3.73
     alpha = 0.8          # AR coefficient for factor process
     
-    mu = diag(3, p)
+    mu = diag(5, p)
   }
-  
+
   if (type == 2) {
     # BWS space p by p SPD matrices
     manifold.type = "BWS"
     p = 10
     r = 5
-    fac_noise = 2.0
-    fac_sd = 2.0
-    alpha = 0.8 # AR coefficient for factor process
+    fac_noise = sqrt(10)
+    fac_sd = 2.0         # SNR~5.56
+    alpha = 0.8          # AR coefficient for factor process
     
-    mu = 20 * toeplitz(0.6^c(0:(p - 1)))
+    mu = diag(5, p)
+  }
+
+  if (type == 3) {
+    # BWS space p by p SPD matrices
+    manifold.type = "BWS"
+    p = 10
+    r = 5
+    fac_noise = sqrt(5)
+    fac_sd = 2.0         # SNR~11.11
+    alpha = 0.8          # AR coefficient for factor process
+    
+    mu = diag(5, p)
   }
   
+  if (type == 4) {
+    # BWS space p by p SPD matrices
+    manifold.type = "BWS"
+    p = 10
+    r = 5
+    fac_noise = sqrt(15)
+    fac_sd = 2.0         # SNR~3.73
+    alpha = 0.8 # AR coefficient for factor process
+    
+    mu = 10 * toeplitz(0.6^c(0:(p - 1)))
+  }
+  
+  if (type == 5) {
+    # BWS space p by p SPD matrices
+    manifold.type = "BWS"
+    p = 10
+    r = 5
+    fac_noise = sqrt(10)
+    fac_sd = 2.0         # SNR~5.56
+    alpha = 0.8 # AR coefficient for factor process
+    
+    mu = 10 * toeplitz(0.6^c(0:(p - 1)))
+  }
+
+  if (type == 6) {
+    # BWS space p by p SPD matrices
+    manifold.type = "BWS"
+    p = 10
+    r = 5
+    fac_noise = sqrt(5)
+    fac_sd = 2.0         # SNR~11.11
+    alpha = 0.8 # AR coefficient for factor process
+    
+    mu = 10 * toeplitz(0.6^c(0:(p - 1)))
+  }
   
   if (manifold.type == "BWS") {
 
@@ -150,7 +197,8 @@ dta_gen = function (n, type) {
     Factors = Factors[-c(1:100),]
     
     A = array(rnorm(p * (p + 1) * r / 2), dim = c(p * (p + 1) / 2, r))
-    A = t(t(A) / apply(A, 2, norm, "2"))
+    A = qr.Q(qr(A))
+    # A = t(t(A) / apply(A, 2, norm, "2"))
 
     Z = array(NA, dim = c(n, p * (p + 1) / 2))
     Z_nless = array(NA, dim = c(n, p * (p + 1) / 2))
@@ -179,9 +227,9 @@ dta_gen = function (n, type) {
 
 ###########################
 # Fix p = 10, r = 5, vary n = 50, 100, 200
-set.seed(5566)  
+#set.seed(5566)  
 num_sim = 100
-type = 2
+#type = 1
 
 n = 50
 p = 10
