@@ -218,3 +218,105 @@ predict_fm = function (V, mu, new_x) {
   
   return (x_hat)
 }
+
+#' Computes a canonical basis for the tangent space at a point in BWS
+#' 
+#' @param Sigma Base point
+#' @return An array of orthonormal basis
+#' @export
+tan_basis_bws = function (Sigma) {
+  p = dim(Sigma)[1]
+  
+  model = eigen(Sigma)
+  lambdas = model$values
+  P = model$vectors
+  
+  # construct canonical basis
+  E = array(NA, dim = c(p * (p + 1) / 2, p, p))
+  E_lyapunov = array(NA, dim = c(p * (p + 1) / 2, p, p))
+  counter = 0
+  for (i in 1:p) {
+    for (j in i:p) {
+      counter = counter + 1
+      S = matrix(0, ncol = p, nrow = p)
+      S_tilde = matrix(0, ncol = p, nrow = p)
+      if (i == j) {
+        S[i,j] = sqrt(2 * (lambdas[i] + lambdas[j]))
+        S_tilde[i,j] = 1 / sqrt(lambdas[i])
+      } else {
+        S[i,j] = sqrt(lambdas[i] + lambdas[j])
+        S[j,i] = sqrt(lambdas[i] + lambdas[j])
+        
+        S_tilde[i,j] = 1 / sqrt(lambdas[i] + lambdas[j])
+        S_tilde[j,i] = 1 / sqrt(lambdas[i] + lambdas[j])
+      }
+      E[counter,,] = P %*% S %*% t(P)
+      E_lyapunov[counter,,] = P %*% S_tilde %*% t(P) # L_{mu_hat}(E)
+    }
+  }
+  
+  return (list("E" = E, "E_lyapunov" = E_lyapunov))
+}
+
+
+#' Estimate the RFM in Bures-Wasserstein manifold
+#' 
+#' This function estimates the Riemannian factor model (RFM) with data being
+#' symmetric positive definite matrices equipped with the Bures-Wasserstein
+#' metric.
+#' 
+#' @param x an $n \times p \times p$ array of data where sample is a $p \times p$ SPD matrix
+#' @param r number of factors to extract
+#' @param h number of lags used in estimating the factor model
+#' @param mu_tol optimization tolerance level for estimating the Fr\'{e}chet mean
+#' @return 
+#' \describe{
+#'  \item{A}{Estimated loading matrix}
+#'  \item{f_hat}{Estimated factor process}
+#'  \item{E}{A set of orthonormal basis for the tangent space}
+#'  \item{mu_hat}{Estimated Fr\'{e}chet mean}
+#' } 
+#' @export
+rfm_bws = function (x, r, h = 6, mu_tol) {
+  n = dim(x)[1]
+  p = dim(x)[2]
+  
+  # Estimate mu
+  mu_hat = mean_on_BWS(x, tol = mu_tol, verbose = FALSE)
+  
+  # Construct a set of orthonormal basis
+  coord = tan_basis_bws(mu_hat)
+  E = coord$E
+  E_lyapunov = coord$E_lyapunov
+  
+
+  # construct log-mapped data
+  log_x = Log_BWS(x, mu_hat)
+  log_x_vec = array(NA, dim = c(n, p * (p + 1) / 2))
+  counter = 0
+  for (m in 1:n) {
+    for (i in 1:p) {
+      for (j in i:p) {
+        counter = counter + 1
+        log_x_vec[m, counter] = 0.5 * sum(diag(E_lyapunov[counter,,] %*% log_x))
+      }
+    }
+  }
+  
+  # Estimate the factor model
+  model = LYB_fm(log_x_vec, r = r, h = h)
+  
+  return(list("A" = model$V, "f_hat" = model$f_hat, "E" = E, "mu_hat" = mu_hat))
+}
+
+
+
+
+
+
+
+
+
+
+
+
