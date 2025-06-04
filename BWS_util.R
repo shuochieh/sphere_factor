@@ -107,6 +107,64 @@ Log_BWS = function (X, M) {
   return (output)
 }
 
+log_vec_construct = function (x, M, E_lyapunov) {
+  log_x = Log_BWS(x, M)
+  
+  if (length(dim(x)) == 3) {
+    n = dim(x_test)[1]
+    p = dim(x_test)[2]
+    log_x_vec = array(NA, dim = c(n, p * (p + 1) / 2))
+    
+    counter = 0
+    for (m in 1:n) {
+      for (i in 1:p) {
+        for (j in i:p) {
+          counter = counter + 1
+          log_x_vec[m, counter] = 0.5 * sum(diag(E_lyapunov[counter,,] %*% log_x[m,,]))
+        }
+      }
+    }
+  } else if (length(dim(x)) == 2) {
+    p = dim(x_test)[1]
+    log_x_vec = rep(NA, p * (p + 1) / 2)
+    
+    counter = 0
+    for (i in 1:p) {
+      for (j in i:p) {
+        counter = counter + 1
+        log_x_vec[counter] = 0.5 * sum(diag(E_lyapunov[counter,,] %*% log_x))
+      }
+    }
+  } else {
+    stop(paste("log_vec_construct: Incorrect dimensions", dim(x)))
+  }
+  
+  return (log_x_vec)
+}
+
+#' Identify a tangent vector (in E coordinate) into a symmetric matrix
+#' 
+#' @param z a coordinate in E
+#' @return a symmetric matrix in the tangent space
+#' 
+log_to_tangent = function (z, E) {
+  p = dim(E[1,,])[1]
+  res = array(0, dim = c(p, p))
+  if (length(z) != p * (p + 1) / 2) {
+    stop("log_to_tangent: z has wrong length")
+  }
+  
+  counter = 0
+  for (i in 1:p) {
+    for (j in i:p) {
+      counter = counter + 1
+      res = res + z[counter] * E[counter,,]
+    }
+  }
+  
+  return (res)
+}
+
 symmetric_to_vector = function (X) {
   return (X[upper.tri(X, diag = TRUE)])
 }
@@ -132,7 +190,7 @@ is.spd = function (x, tol = 1e-8) {
 }
 
 project_to_SPD <- function(A, epsilon = 0) {
-  # epsilon is to ensure positive-definiteness (ocassionally used)
+  # epsilon is to ensure positive-definiteness (occassionally used)
   
   eig <- eigen(A)
   eig$values[eig$values < epsilon] <- epsilon
@@ -222,7 +280,7 @@ predict_fm = function (V, mu, new_x) {
 #' Computes a canonical basis for the tangent space at a point in BWS
 #' 
 #' @param Sigma Base point
-#' @return An array of orthonormal basis
+#' @return An array of orthonormal basis (E), and an array of E passed through the Lyapunov operator
 #' @export
 tan_basis_bws = function (Sigma) {
   p = dim(Sigma)[1]
@@ -258,7 +316,6 @@ tan_basis_bws = function (Sigma) {
   return (list("E" = E, "E_lyapunov" = E_lyapunov))
 }
 
-
 #' Estimate the RFM in Bures-Wasserstein manifold
 #' 
 #' This function estimates the Riemannian factor model (RFM) with data being
@@ -274,6 +331,7 @@ tan_basis_bws = function (Sigma) {
 #'  \item{A}{Estimated loading matrix}
 #'  \item{f_hat}{Estimated factor process}
 #'  \item{E}{A set of orthonormal basis for the tangent space}
+#'  \item{E_lyapunov}{A set of orthonormal basis passed to the Lyapunov operator}
 #'  \item{mu_hat}{Estimated Fr\'{e}chet mean}
 #' } 
 #' @export
@@ -289,24 +347,14 @@ rfm_bws = function (x, r, h = 6, mu_tol) {
   E = coord$E
   E_lyapunov = coord$E_lyapunov
   
-
   # construct log-mapped data
-  log_x = Log_BWS(x, mu_hat)
-  log_x_vec = array(NA, dim = c(n, p * (p + 1) / 2))
-  counter = 0
-  for (m in 1:n) {
-    for (i in 1:p) {
-      for (j in i:p) {
-        counter = counter + 1
-        log_x_vec[m, counter] = 0.5 * sum(diag(E_lyapunov[counter,,] %*% log_x))
-      }
-    }
-  }
-  
+  log_x_vec = log_vec_construct(x, mu_hat, E_lyapunov)
+
   # Estimate the factor model
   model = LYB_fm(log_x_vec, r = r, h = h)
   
-  return(list("A" = model$V, "f_hat" = model$f_hat, "E" = E, "mu_hat" = mu_hat))
+  return(list("A" = model$V, "f_hat" = model$f_hat, "E" = E, "E_lyapunov" = E_lyapunov,
+              "mu_hat" = mu_hat, "factor_model" = model))
 }
 
 
