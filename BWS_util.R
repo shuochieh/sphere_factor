@@ -349,7 +349,8 @@ pt_bws = function (Sigma1, Sigma2, V, method = "adams") {
             parms = list(Sigma1 = Sigma1, Sigma2 = Sigma2),
             method = method)
   
-  return (sol)
+  res = matrix(sol[101, -1], p, p)
+  return (res)
 }
 
 #' Computes a canonical basis for the tangent space at a point in BWS
