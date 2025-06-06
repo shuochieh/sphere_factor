@@ -119,12 +119,12 @@ log_vec_construct = function (x, M, E_lyapunov = NULL) {
   }
   
   if (length(dim(x)) == 3) {
-    n = dim(x_test)[1]
-    p = dim(x_test)[2]
+    n = dim(x)[1]
+    p = dim(x)[2]
     log_x_vec = array(NA, dim = c(n, p * (p + 1) / 2))
     
-    counter = 0
     for (m in 1:n) {
+      counter = 0
       for (i in 1:p) {
         for (j in i:p) {
           counter = counter + 1
@@ -133,7 +133,7 @@ log_vec_construct = function (x, M, E_lyapunov = NULL) {
       }
     }
   } else if (length(dim(x)) == 2) {
-    p = dim(x_test)[1]
+    p = dim(x)[1]
     log_x_vec = rep(NA, p * (p + 1) / 2)
     
     counter = 0
@@ -316,11 +316,11 @@ Christoffel_BWS_core = function (Sigma, X, Y) {
 
 Christoffel_BWS = function (t, U, param) {
   
-  p = dim(Sigma1)[1]
-  U = matrix(U, p, p)
   Sigma1 = param$Sigma1
   Sigma2 = param$Sigma2
-  
+  p = dim(Sigma1)[1]
+  U = matrix(U, p, p)
+
   A = Sigma1 %*% Sigma2
   B = Sigma2 %*% Sigma1
   A = sqrtm(A)
@@ -346,7 +346,7 @@ pt_bws = function (Sigma1, Sigma2, V, method = "adams") {
   sol = ode(y = as.vector(V),
             times = times,
             func = Christoffel_BWS,
-            parms = list(Sigma1 = Sigma1, Sigma2 = Sigma2),
+            parms = list("Sigma1" = Sigma1, "Sigma2" = Sigma2),
             method = method)
   
   res = matrix(sol[101, -1], p, p)

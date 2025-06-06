@@ -88,7 +88,6 @@ dta_gen = function (n, type) {
     
     A = array(rnorm(p * (p + 1) * r / 2), dim = c(p * (p + 1) / 2, r))
     A = qr.Q(qr(A))
-    # A = t(t(A) / apply(A, 2, norm, "2"))
 
     Z = array(NA, dim = c(n, p * (p + 1) / 2))
     Z_nless = array(NA, dim = c(n, p * (p + 1) / 2))
@@ -97,14 +96,16 @@ dta_gen = function (n, type) {
       Z[t,] = A %*% c(Factors[t,]) + rnorm(p * (p + 1) / 2, 
                                            sd = fac_noise * sqrt(2 / (p * (p + 1))))
     }
+    
+    coord = tan_basis_bws(mu)
 
     X = array(NA, dim = c(n, p, p))
     X_nless = array(NA, dim = c(n, p, p))
     for (t in 1:n) {
-      V = vector_to_symmetric(Z[t,], p)
+      V = log_to_tangent(Z[t,], coord$E)
       X[t,,] = Exp_BWS_core(V, mu)
       
-      V_nless = vector_to_symmetric(Z_nless[t,], p)
+      V_nless = log_to_tangent(Z_nless[t,], coord$E)
       X_nless[t,,] = Exp_BWS_core(V_nless, mu)
     }
     
@@ -114,6 +115,26 @@ dta_gen = function (n, type) {
   
 }
 
+###########################
+set.seed(5566)
+num_sim = 100
+
+ns = c(50, 100, 200)
+p = 10
+n_test = 200
+
+for (type in types) {
+  for (n in ns) {
+    results = vector("list", length = num_sim)
+    
+    for (zz in 1:num_sim) {
+      dta = dta_gen(n + n_test, type)
+      model = main_BWS(dta$X, 10, n_test, true_A = dta$A, true_mu = dta$mu,
+                       fraction = FALSE)
+    }
+  }
+  
+}
 
 ###########################
 # Fix p = 10, r = 5, vary n = 50, 100, 200
