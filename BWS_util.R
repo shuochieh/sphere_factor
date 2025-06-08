@@ -227,14 +227,25 @@ project_to_SPD <- function(A, epsilon = 0) {
 }
 
 mean_on_BWS = function (X, tau = 0.1, tol = 1e-4, max.iter = 1000,
-                             verbose = FALSE) {
+                        batch_size = NULL, verbose = FALSE) {
   # X: (n by ...) data
   # tau: step size
+  tau_0 = tau
   
   n = dim(X)[1]
+  p = dim(X)[2]
   mu = X[1,,]
   for (i in 1:max.iter) {
-    grad = apply(Log_BWS(X, mu), c(2, 3), mean)
+    # mini-batch sampling
+    if (!is.null(batch_size)) {
+      idx = sample(n, batch_size, replace = FALSE)
+      X_batch = X[idx,,]
+      grad = apply(Log_BWS(X_batch, mu), c(2, 3), mean) # stochastic gradient
+    } else {
+      grad = colMeans(matrix(Log_BWS(X, mu), nrow = dim(X)[1]))
+      grad = matrix(grad, nrow = p, ncol = p)
+    }
+    # grad = apply(Log_BWS(X, mu), c(2, 3), mean)
     mu_new = Exp_BWS(tau * grad, mu)
     
     loss = mean(geod_BWS(X, mu_new))
@@ -247,6 +258,10 @@ mean_on_BWS = function (X, tau = 0.1, tol = 1e-4, max.iter = 1000,
     }
     mu = mu_new
     loss_old = loss
+    
+    if (!is.null(batch_size)) {
+      tau = tau_0 / sqrt(i)
+    }
   }
   
   return (mu)
@@ -273,15 +288,21 @@ LYB_fm = function (x, r, h, demean = TRUE) {
   }
   
   # Eigenanalysis
-  Evec = eigen(pd)$vectors
+  model = eigen(pd)
+  Evec = model$vectors
   V = Evec[,1:r] # (d by r)
+  evals = model$values
   
   # Extract factors and residuals
   f_hat = t(t(V) %*% t(x)) # (n by r)
   e_hat = x - f_hat %*% t(V)
   
+  # Estimate the number of factors
+  ratios = evals[2:r] / evals[1:(r - 1)]
+  r_hat = which.min(ratios)
+  
   return (list("V" = V, "f_hat" = f_hat, "e_hat" = e_hat, 
-               "fitted.val" = f_hat %*% t(V),
+               "fitted.val" = f_hat %*% t(V), "r_hat" = r_hat,
                "mean" = mean))
 }
 
@@ -411,12 +432,13 @@ tan_basis_bws = function (Sigma) {
 #'  \item{mu_hat}{Estimated Fr\'{e}chet mean}
 #' } 
 #' @export
-rfm_bws = function (x, r, h = 6, mu_tol) {
+rfm_bws = function (x, r, h = 6, batch_size = NULL, max.iter = 100) {
   n = dim(x)[1]
   p = dim(x)[2]
   
   # Estimate mu
-  mu_hat = mean_on_BWS(x, tol = mu_tol, verbose = FALSE)
+  mu_hat = mean_on_BWS(x, batch_size = batch_size, max.iter = max.iter,
+                       tau = 0.5, tol = -1, verbose = FALSE)
   
   # Construct a set of orthonormal basis
   coord = tan_basis_bws(mu_hat)
@@ -430,7 +452,8 @@ rfm_bws = function (x, r, h = 6, mu_tol) {
   model = LYB_fm(log_x_vec, r = r, h = h)
   
   return(list("A" = model$V, "f_hat" = model$f_hat, "E" = E, "E_lyapunov" = E_lyapunov,
-              "mu_hat" = mu_hat, "factor_model" = model))
+              "mu_hat" = mu_hat, "factor_model" = model,
+              "r_hat" = model$r_hat))
 }
 
 

@@ -1,12 +1,21 @@
 source("./sphere_util.R")
 source("./BWS_util.R")
 
-Frac_Var_bws = function (x_test, factor_model, 
-                         mu_hat = NULL, E = NULL, E_lyapunov = NULL, 
-                         data_type = "BWS", evaluation_type = "BWS",
-                         fraction = TRUE,
-                         epsilon = 1e-6) {
-  # epsilon is used in project_to_SPD 
+#' This function is used internally to evaluate the factor models
+#' 
+#' Computes evaluation metric for RFM
+#' 
+#' @param x_test raw test data
+#' @param factor_model output from rfm_bws; an LYB_fm object
+#' @param evaluation_type to compute BWS distance or Euclidean (Frobenius distance)
+#' @param  fraction whether to return fraction of variance unexplained or squared prediction errors
+#' 
+Frac_Var_bws = function (x_test, RFM_model, evaluation_type = "BWS", fraction = TRUE) {
+  
+  mu_hat = RFM_model$mu_hat
+  E = RFM_model$E
+  E_lyapunov = RFM_model$E_lyapunov
+  factor_model = RFM_model$factor_model
   
   V = factor_model$V
   z_mean = factor_model$mean
@@ -21,69 +30,42 @@ Frac_Var_bws = function (x_test, factor_model,
     p = dim(x_test)[1]
     x.is.array = FALSE
   }
-
+  
   # construct log-mapped data
-  if (data_type == "BWS") {
-    log_x_vec = log_vec_construct(x_test, mu_hat, E_lyapunov)
-  } else if (data_type == "Euclidean") {
-    if (x.is.array) {
-      log_x_vec = array(NA, dim = c(n, p * (p + 1) / 2))
-      for (m in 1:n) {
-        log_x_vec[m,] = symmetric_to_vector(x_test[m,,])
-      }
-    } else {
-      log_x_vec = symmetric_to_vector(x_test)
-    }
-  } else {
-    stop("Frac_Var_bws: unsupported data type")
-  }
-
+  log_x_vec = log_vec_construct(x_test, mu_hat, E_lyapunov)
+  
+  # make predictions and evaluate
   res = rep(0, r)
   total_var = 0
   for (i in 1:r) {
-    
-    # make predictions
     z_hat = predict_fm(V[,1:i], z_mean, log_x_vec)
-    if (data_type == "Euclidean") {
-      if (evaluation_type == "BWS") {
-        if (!x.is.array) {
-          x_hat = vector_to_symmetric(z_hat)
-          x_hat = project_to_SPD(x_hat, epsilon = epsilon)
-        } else {
-          x_hat = array(NA, dim = c(n, p, p))
-          for (m in 1:n) {
-            temp = vector_to_symmetric(z_hat[m,], p)
-            x_hat[m,,] = project_to_SPD(temp, epsilon = epsilon)
-          }
-        }
-      } else if (evaluation_type == "Euclidean") {
-        x_hat = array(NA, dim = c(n, p, p))
-        for (m in 1:n) {
-          x_hat[m,,] = vector_to_symmetric(z_hat[m,], p)
-        }
-      } else {
-        stop("Frac_Var_bws: unsupported evaluation type")
-      }
-    } else if (data_type == "BWS") {
-      if (!x.is.array) {
-        temp = log_to_tangent(z_hat, E)
-        x_hat = Exp_BWS(temp, mu_hat)
-      } else {
-        x_hat = array(NA, dim = c(n, p, p))
-        for (m in 1:n) {
-          temp = log_to_tangent(z_hat[m,], E)
-          x_hat[m,,] = Exp_BWS(temp, mu_hat)
-        }
+    
+    # predict
+    if (x.is.array) {
+      x_hat = array(NA, dim = c(n, p, p))
+      for (m in 1:n) {
+        temp = log_to_tangent(z_hat[m,], E)
+        x_hat[m,,] = Exp_BWS(temp, mu_hat)
       }
     } else {
-      stop ("Frac_Var_bws: unsupported data type")
+      temp = log_to_tangent(z_hat, E)
+      x_hat = Exp_BWS(temp, mu_hat)
     }
     
     # evaluate
-    if (evaluation_type == "Euclidean") {
-      if (!x.is.array) {
-        res[i] = norm(x_hat - x_test, type = "F")^2
+    if (evaluation_type == "BWS") {
+      if (x.is.array) {
+        for (m in 1:n) {
+          res[i] = res[i] + geod_BWS_core(x_hat[m,,], x_test[m,,])^2
+          if (i == 1) {
+            total_var = total_var + geod_BWS_core(mu_hat, x_test[m,,])^2
+          }
+        }
       } else {
+        res[i] = geod_BWS_core(x_hat, x_test)^2
+      }
+    } else if (evaluation_type == "Euclidean") {
+      if (x.is.array) {
         Euclidean_mu = colMeans(x_test, dims = 1)
         for (m in 1:n) {
           res[i] = res[i] + norm(x_hat[m,,] - x_test[m,,], type = "F")^2
@@ -91,38 +73,111 @@ Frac_Var_bws = function (x_test, factor_model,
             total_var = total_var + norm(Euclidean_mu - x_test[m,,], type = "F")^2
           }
         }
+      } else {
+        res = norm(x_hat - x_test, type = "F")^2
       }
-    } else if (evaluation_type == "BWS") {
-        if (!x.is.array) {
-          res[i] = geod_BWS_core(x_hat, x_test)^2
-        } else {
-          for (m in 1:n) {
-            res[i] = res[i] + geod_BWS_core(x_hat[m,,], x_test[m,,])^2
-            if (i == 1) {
-              total_var = total_var + geod_BWS_core(mu_hat, x_test[m,,])^2
-            }
-          }
-        }
     } else {
-        stop("Frac_Var_bws: unsupported evaluation type")
+      stop("Frac_Var_bws: unsupported evaluation type")
     }
   }
-    
+  
   if (fraction) {
     res = res / total_var
   }
-
+  
   return (res)
 }
 
-sine_theta = function (U, V) {
-
-  U = qr.Q(qr(U))
-  V = qr.Q(qr(V))
+#' This function is used internally to evaluate the factor models
+#' 
+#' Computes evaluation metric for linear factor model
+#' 
+#' @param x_test raw test data
+#' @param factor_model output from LYB_fm
+#' @param mu_hat BWS Frechet mean, externally given
+#' @param evaluation_type to compute BWS distance or Euclidean (Frobenius distance)
+#' @param fraction whether to return fraction of variance unexplained or squared prediction errors
+#' @param epsilon used in projecting predictions to SPD (only when evaluation type == "BWS")
+#' 
+Frac_Var_LYB = function (x_test, factor_model, mu_hat,
+                         evaluation_type = "BWS",
+                         fraction = TRUE,
+                         epsilon = 1e-6) {
+  V = factor_model$V
+  z_mean = factor_model$mean
+  r = dim(V)[2]
   
-  s = pmin(svd(t(U) %*% V)$d, 1) # for numerical stability
+  if (length(dim(x_test)) == 3) {
+    n = dim(x_test)[1]
+    p = dim(x_test)[2]
+    x.is.array = TRUE
+  } else if (length(dim(x_test)) == 2) {
+    n = 1
+    p = dim(x_test)[1]
+    x.is.array = FALSE
+  }
   
-  return (max(acos(s)))
+  # encode SPD as vectors
+  if (x.is.array) {
+    z = array(NA, dim = c(n, p * (p + 1) / 2))
+    for (m in 1:n) {
+      z[m,] = symmetric_to_vector(x_test[m,,])
+    }
+  } else {
+    z = symmetric_to_vector(x_test)
+  }
+  
+  # make predictions and evaluate
+  res = rep(0, r)
+  total_var = 0
+  for (i in 1:r) {
+    z_hat = predict_fm(V[,1:i], z_mean, z)
+    
+    # predict
+    if (x.is.array) {
+      x_hat = array(NA, dim = c(n, p, p))
+      for (m in 1:n) {
+        x_hat[m,,] = vector_to_symmetric(z_hat[m,], p)
+      }
+    } else {
+      x_hat = vector_to_symmetric(z_hat, p)
+    }
+    
+    # evaluate
+    if (evaluation_type == "BWS") {
+      if (x.is.array) {
+        for (m in 1:n) {
+          temp = project_to_SPD(x_hat[m,,], epsilon)
+          res[i] = res[i] + geod_BWS_core(temp, x_test[m,,])^2
+          if (i == 1) {
+            total_var = total_var + geod_BWS_core(mu_hat, x_test[m,,])^2
+          }
+        }
+      } else {
+        res[i] = geod_BWS_core(project_to_SPD(x_hat, epsilon), x_test)^2
+      }
+    } else if (evaluation_type == "Euclidean") {
+      if (x.is.array) {
+        Euclidean_mu = colMeans(x_test, dims = 1)
+        for (m in 1:n) {
+          res[i] = res[i] + norm(x_hat[m,,] - x_test[m,,], type = "F")^2
+          if (i == 1) {
+            total_var = total_var + norm(Euclidean_mu - x_test[m,,], type = "F")^2
+          }
+        }
+      } else {
+        res = norm(x_hat - x_test, type = "F")^2
+      }
+    } else {
+      stop("Frac_Var_bws: unsupported evaluation type")
+    }
+  }
+  
+  if (fraction) {
+    res = res / total_var
+  }
+  
+  return (res)
 }
 
 subspace_d = function (U, V) {
@@ -160,7 +215,7 @@ subspace_d = function (U, V) {
 #' @param true_mu true Frechet mean used in simulation
 #' @param fraction returns fraction of variance unexplained; returns squared prediction errors if false
 #' 
-main_BWS = function (x, r, test_size = 0, h = 6, mu_tol = 1e-3,
+main_BWS = function (x, r, test_size = 0, h = 6, batch_size = NULL, max.iter = 100,
                      true_A = NULL, true_mu = NULL, fraction = TRUE) {
   
   n = dim(x)[1]
@@ -178,12 +233,13 @@ main_BWS = function (x, r, test_size = 0, h = 6, mu_tol = 1e-3,
   }
   
   # estimate RFM
-  model = rfm_bws(x, r = r, h = h, mu_tol = mu_tol)
+  model = rfm_bws(x, r = r, h = h, batch_size = batch_size, max.iter = max.iter)
   V = model$A
   Factors = model$f_hat
   mu_hat = model$mu_hat
   E = model$E
   E_lyapunov = model$E_lyapunov
+  r_hat_RFM = model$r_hat
   
   # compare estimated loading space
   if (!is.null(A)) {
@@ -202,22 +258,35 @@ main_BWS = function (x, r, test_size = 0, h = 6, mu_tol = 1e-3,
 
   # results
   if (test_size > 0) {
-    res1 = Frac_Var_bws(x_test, model$factor_model, mu_hat, E, E_lyapunov,
-                        "BWS", "BWS", fraction)
-    res2 = Frac_Var_bws(x_test, model$factor_model, mu_hat, E, E_lyapunov,
-                        "Euclidean", "BWS", fraction)
+    res1 = Frac_Var_bws(x_test, model, "BWS", fraction)
+    res2 = Frac_Var_bws(x_test, model, "Euclidean", fraction)
   } else {
-    res1 = Frac_Var_bws(x, model$factor_model, mu_hat, E, E_lyapunov,
-                        "BWS", "BWS", fraction)
-    res2 = Frac_Var_bws(x, model$factor_model, mu_hat, E, E_lyapunov,
-                        "Euclidean", "BWS", fraction)
+    res1 = Frac_Var_bws(x, model, "BWS", fraction)
+    res2 = Frac_Var_bws(x, model, "Euclidean", fraction)
   }
   
   # estimate linear factor model
+  # encode data as vectors
+  x_vector = array(NA, dim = c(n, p * (p + 1) / 2))
+  for (m in 1:n) {
+    x_vector[m,] = symmetric_to_vector(x[m,,])
+  }
+  model = LYB_fm(x_vector, r = r, h = h)
+  r_hat_LYB = model$r_hat
   
+  if (test_size > 0) {
+    res3 = Frac_Var_LYB(x_test, model, mu_hat, "BWS", fraction)
+    res4 = Frac_Var_LYB(x_test, model, mu_hat, "Euclidean", fraction)
+  } else {
+    res3 = Frac_Var_LYB(x, model, mu_hat, "BWS", fraction)
+    res4 = Frac_Var_LYB(x, model, mu_hat, "Euclidean", fraction)
+  }
   
-  return (list("mu_hat" = mu_hat, "FVU_BWS" = res1, "FVU_LYB" = res2,
-               "loading_dist" = subspace_dist))
+  return (list("mu_hat" = mu_hat, 
+               "FVU_RFM_BWS" = res1, "FVU_RFM_Euc" = res2,
+               "FVU_LYB_BWS" = res3, "FVU_LYB_Euc" = res4,
+               "loading_dist" = subspace_dist,
+               "r_hat_RFM" = r_hat_RFM, "r_hat_LYB" = r_hat_LYB))
 }
 
 main_uneven_sphere = function (x, r, test_size = 0, h = 6) {
