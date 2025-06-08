@@ -155,7 +155,7 @@ plot_assist = function (res1, res2 = NULL, oracle = NULL,
 
 
 ###########################
-num_sim = 10
+num_sim = 100
 
 # CASE SWITCHING HELPER
 # n = 50, p = 10
@@ -198,12 +198,12 @@ for (case in 1:6) {
       cl = makeCluster(n_cores)
       registerDoParallel(cl)
       
-      results = foreach(i = 1:10, .packages = c("maotai", "expm", "deSolve"),
+      results = foreach(i = 1:num_sim, .packages = c("maotai", "expm", "deSolve"),
                         .inorder = FALSE) %dopar% {
                           dta = dta_gen_BWS(n = n + 200, p = p, mu_type = mu_type, r = 5,
                                             s = s, z_noise = z_noise, alpha = 0.7)
-                          sim_res = main_BWS(dta$X, 10, test_size = 200, h = 6, batch_size = 30,
-                                             max.iter = 15, true_A = dta$A, true_mu = dta$mu)
+                          sim_res = main_BWS(dta$X, 10, test_size = 200, h = 6, batch_size = 16,
+                                             max.iter = 32, true_A = dta$A, true_mu = dta$mu)
                           oracle_BWS = sum(geod_BWS(dta$X_nless, dta$X)^2) / sum(geod_BWS(dta$mu, dta$X)^2)
                           
                           sink()
