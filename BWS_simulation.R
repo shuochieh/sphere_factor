@@ -1,6 +1,5 @@
-library(tidyr)
-library(ggplot2)
-library(reshape2)
+library(foreach)
+library(doParallel)
 source("./main_func.R")
 
 t_isonormal_sampler = function (n, p, norm_cut = Inf, sd = 1) {
@@ -41,11 +40,13 @@ t_isonormal_sampler = function (n, p, norm_cut = Inf, sd = 1) {
 dta_gen_BWS = function (n, p, mu_type, r = 5, 
                         s = 1, z_noise = 1, alpha = 0.7) {
   
-  if (type == 1) {
+  if (mu_type == 1) {
     mu = diag(rep(1, p))
-  } else if (type == 2) {
+  } else if (mu_type == 2) {
     mu = 5 * toeplitz(0.6^c(0:(p - 1)))
-  } 
+  } else {
+    stop("dta_gen_BWS: unsupported mu_type")
+  }
   
   Factors = array(0, dim = c(n + 100, r))
   for (t in 2:(n + 100)) {
@@ -79,11 +80,11 @@ dta_gen_BWS = function (n, p, mu_type, r = 5,
     V_nless = log_to_tangent(Z_nless[t,], coord$E)
     X_nless[t,,] = Exp_BWS_core(V_nless, mu)
     
-    pct <- floor(10 * t / n)  # integer division gives 0 to 10
-    if (pct > reported) {
-      cat("  dta_gen:", paste0(pct * 10, "% complete\n"))
-      reported <- pct
-    }
+    # pct <- floor(10 * t / n)  
+    # if (pct > reported) {
+    #   cat("  dta_gen:", paste0(pct * 10, "% complete\n"))
+    #   reported <- pct
+    # }
   }
   
   return (list("X" = X, "X_nless" = X_nless, "Z" = Z, "Z_nless" = Z_nless, 
@@ -103,81 +104,168 @@ dta_gen_BWS = function (n, p, mu_type, r = 5,
 # res$r_hat_RFM
 # res$r_hat_LYB
 
+plot_assist = function (res1, res2 = NULL, oracle = NULL,
+                        labs = NULL, ylim = NULL, main = NULL) {
+  mean1 = colMeans(res1)
+  q05_1 = apply(res1, 2, quantile, 0.05)
+  q95_1 = apply(res1, 2, quantile, 0.95)
+  
+  if (!is.null(res2)) {
+    mean2 = colMeans(res2)
+    q05_2 = apply(res2, 2, quantile, 0.05)
+    q95_2 = apply(res2, 2, quantile, 0.95)
+  }
+  
+  if (is.null(ylim)) {
+    ylim = c(0, 1)
+  }
+  
+  if (is.null(main)) {
+    main = ""
+  }
+  
+  if (!is.null(labs)) {
+    xlab = labs[1]
+    ylab = labs[2]
+  } else {
+    xlab = ""
+    ylab = ""
+  }
+  
+  x_vals = 1:length(mean1)
+  plot(x = x_vals, y = mean1, type = "n",
+       ylim = ylim, 
+       xlab = xlab, ylab = ylab, main = main, bty = "L")
+  grid(col = "lightgray", lty = "dotted", lwd = 1)
+  
+  polygon(c(x_vals, rev(x_vals)), c(q05_1, rev(q95_1)),
+          col = adjustcolor("gray", alpha.f = 0.6), border = NA)
+  lines(x_vals, mean1, col = "black", lwd = 2)
+  
+  if (!is.null(res2)) {
+    polygon(c(x_vals, rev(x_vals)), c(q05_2, rev(q95_2)),
+            col = adjustcolor("gray", alpha.f = 0.6), border = NA)
+    lines(x_vals, mean2, col = "black", lwd = 2, lty = 2)
+  }
+  
+  if (!is.null(oracle)) {
+    abline(h = oracle, col = "black", lty = 4, lwd = 1.5)
+  }
+} 
+
 
 ###########################
-set.seed(5566)
-num_sim = 100
+num_sim = 10
 
-ns = c(50, 100, 200)
-p = 10
-n_test = 200
+# CASE SWITCHING HELPER
+# n = 50, p = 10
+# Case 1: s = 1, z_noise = 1; mu_type = 1
+# Case 2: s = 0.5, z_noise = 1.5; mu_type = 1
+# Case 3: s = 1.5, z_noise = 0.5; mu_type = 1
+# Case 4: s = 1, z_noise = 1; mu_type = 2
+# Case 5: s = 0.5, z_noise = 1.5; mu_type = 2
+# Case 6: s = 1.5, z_noise = 0.5; mu_type = 2
+case_param = function (case) {
+  if (case == 1) {
+    s = 1.0; z_noise = 1.0; mu_type = 1
+  } else if (case == 2) {
+    s = 0.5; z_noise = 1.5; mu_type = 1
+  } else if (case == 3) {
+    s = 1.5; z_noise = 0.5; mu_type = 1
+  } else if (case == 4) {
+    s = 1.0; z_noise = 1.0; mu_type = 2
+  } else if (case == 5) {
+    s = 0.5; z_noise = 1.5; mu_type = 2
+  } else if (case == 6) {
+    s = 0.5; z_noise = 1.5; mu_type = 2
+  } else {
+    stop("case_param: unsupported case")
+  } 
+  
+  return (list("s" = s, "z_noise" = z_noise, "mu_type" = mu_type))
+}
 
-for (type in types) {
-  for (n in ns) {
-    results = vector("list", length = num_sim)
-    
-    for (zz in 1:num_sim) {
-      dta = dta_gen(n + n_test, type)
-      res = main_BWS(dta$X, 10, n_test, true_A = dta$A, true_mu = dta$mu,
-                     fraction = TRUE)
+for (case in 1:6) {
+  cat("Case:", case, "...\n")
+  parms = case_param(case)
+  s = parms$s
+  z_noise = parms$z_noise
+  mu_type = parms$mu_type
+  par(mfrow = c(3, 3))
+  for (n in c(50, 100, 200)) {
+    for (p in c(10, 20, 40)) {
+      n_cores = detectCores() - 1
+      cl = makeCluster(n_cores)
+      registerDoParallel(cl)
+      
+      results = foreach(i = 1:10, .packages = c("maotai", "expm", "deSolve"),
+                        .inorder = FALSE) %dopar% {
+                          dta = dta_gen_BWS(n = n + 200, p = p, mu_type = mu_type, r = 5,
+                                            s = s, z_noise = z_noise, alpha = 0.7)
+                          sim_res = main_BWS(dta$X, 10, test_size = 200, h = 6, batch_size = 30,
+                                             max.iter = 15, true_A = dta$A, true_mu = dta$mu)
+                          oracle_BWS = sum(geod_BWS(dta$X_nless, dta$X)^2) / sum(geod_BWS(dta$mu, dta$X)^2)
+                          
+                          sink()
+                          cat("  iteration", i, "\n")
+                          list("FVU_RFM_BWS" = sim_res$FVU_RFM_BWS, "FVU_LYB_BWS" = sim_res$FVU_LYB_BWS,
+                               "FVU_RFM_Euc" = sim_res$FVU_RFM_Euc, "FVU_LYB_Euc" = sim_res$FVU_LYB_Euc,
+                               "loading_d" = sim_res$loading_dist, 
+                               "r_hat_RFM" = sim_res$r_hat_RFM, "r_hat_LYB" = sim_res$r_hat_LYB,
+                               "oracle_BWS" = oracle_BWS)
+                        }
+      stopCluster(cl)
+      
+      FVU_RFM_BWS = array(NA, dim = c(num_sim, 10))
+      FVU_LYB_BWS = array(NA, dim = c(num_sim, 10))
+      FVU_RFM_Euc = array(NA, dim = c(num_sim, 10))
+      FVU_LYB_Euc = array(NA, dim = c(num_sim, 10))
+      loading_d = array(NA, dim = c(num_sim, 10))
+      r_hat_RFM = rep(NA, num_sim)
+      r_hat_LYB = rep(NA, num_sim)
+      oracle_BWS = rep(NA, num_sim)
+      
+      for (i in 1:num_sim) {
+        FVU_RFM_BWS[i,] = results[[i]]$FVU_RFM_BWS
+        FVU_LYB_BWS[i,] = results[[i]]$FVU_LYB_BWS
+        FVU_RFM_Euc[i,] = results[[i]]$FVU_RFM_Euc
+        FVU_LYB_Euc[i,] = results[[i]]$FVU_LYB_Euc
+        loading_d[i,] = results[[i]]$loading_d
+        r_hat_RFM[i] = results[[i]]$r_hat_RFM
+        r_hat_LYB[i] = results[[i]]$r_hat_LYB
+        oracle_BWS[i] = results[[i]]$oracle_BWS
+      }
+      
+      save(FVU_RFM_BWS, 
+           file = paste0("./save/FVU_RFM_BWS_n", n, "_p", p, "_case", case, ".RData"))
+      save(FVU_LYB_BWS, 
+           file = paste0("./save/FVU_LYB_BWS_n", n, "_p", p, "_case", case, ".RData"))
+      save(FVU_RFM_Euc, 
+           file = paste0("./save/FVU_RFM_Euc_n", n, "_p", p, "_case", case, ".RData"))
+      save(FVU_LYB_Euc, 
+           file = paste0("./save/FVU_LYB_Euc_n", n, "_p", p, "_case", case, ".RData"))
+      save(loading_d, 
+           file = paste0("./save/loading_d_n", n, "_p", p, "_case", case, ".RData"))
+      save(r_hat_RFM, 
+           file = paste0("./save/r_hat_RFM_n", n, "_p", p, "_case", case, ".RData"))
+      save(r_hat_LYB, 
+           file = paste0("./save/r_hat_LYB_n", n, "_p", p, "_case", case, ".RData"))
+      save(oracle_BWS,
+           file = paste0("./save/oracle_BWS_n", n, "_p", p, "_case", case, ".RData"))
+      
+      
+      plot_assist(FVU_RFM_BWS, res2 = FVU_RFM_Euc, oracle = mean(oracle_BWS), 
+                  labs = c("number of factors", "Geodesic FVU"), 
+                  main = paste0("n = ", n, "; p = ", p))
+      
+      cat("sub-case closed\n\n")
+      
     }
   }
 }
 
 
-p = 10
-n = 1000
-dta = dta_gen(n, "prototype", p = p)
-temp = mean_on_BWS(dta$X[1:200,,], batch_size = 30, max.iter = 100, tau = 0.5, verbose = T, tol = 0)
-print(temp)
-geod_BWS(temp, dta$mu)
-mean(geod_BWS(dta$X, dta$mu))
-
-z_log = array(NA, dim = c(n, p * (p + 1) / 2))
-z_log_true = array(NA, dim = c(n, p * (p + 1) / 2))
-for (m in 1:n) {
-  v = Log_BWS(dta$X[m,,], temp)
-  v_true = Log_BWS(dta$X[m,,], dta$mu)
-  z_log[m,] = tangent_in_E(v, temp)
-  z_log_true[m,] = tangent_in_E(v_true, dta$mu)
-}
-colMeans(z_log)
-colMeans(z_log_true)
-
-n = 300
-p = 5
-mean_dist1 = rep(0, 100)
-loading_dist1 = rep(0, 100)
-for (zz in 1:100) {
-  dta = dta_gen(n, "prototype", p = p)
-  res = main_BWS(dta$X, 10, batch_size = 20, max.iter = 50,
-                 true_A = dta$A, true_mu = dta$mu, fraction = TRUE)
-  mean_dist1[zz] = geod_BWS_core(res$mu_hat, dta$mu)
-  loading_dist1[zz] = res$loading_dist[5]
-  cat("iteration", zz, "\n")
-}
-n = 300
-p = 5
-mean_dist2 = rep(0, 100)
-loading_dist2 = rep(0, 100)
-for (zz in 1:100) {
-  dta = dta_gen(n, 0, p = p)
-  res = main_BWS(dta$X, 10, batch_size = 20, max.iter = 50,
-                 true_A = dta$A, true_mu = dta$mu, fraction = TRUE)
-  mean_dist2[zz] = geod_BWS_core(res$mu_hat, dta$mu)
-  loading_dist2[zz] = res$loading_dist[5]
-  cat("iteration", zz, "\n")
-}
-plot(x = mean_dist1, y = loading_dist1, col = "darkblue", 
-     xlim = range(c(mean_dist1, mean_dist2)),
-     ylim = range(c(loading_dist1, loading_dist2)))
-points(x = mean_dist2, y = loading_dist2, col = "steelblue", pch = 19)
-plot(x = mean_dist1, y = mean_dist2, xlim = c(0, 5), ylim = c(0, 5))
-abline(a = 0, b = 1, col = "blue")
-plot(x = loading_dist1, y = loading_dist2, xlim = c(0, 1), ylim = c(0, 1))
-abline(a = 0, b = 1, col = "blue")
-
-
+### Below codes are defunct ###
 ###########################
 # Fix p = 10, r = 5, vary n = 50, 100, 200
 #set.seed(5566)  
