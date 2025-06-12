@@ -43,7 +43,7 @@ dta_gen_BWS = function (n, p, mu_type, r = 5,
   if (mu_type == 1) {
     mu = diag(rep(1, p))
   } else if (mu_type == 2) {
-    mu = 5 * toeplitz(0.6^c(0:(p - 1)))
+    mu = 5 * toeplitz(0.8^c(0:(p - 1)))
   } else {
     stop("dta_gen_BWS: unsupported mu_type")
   }
@@ -139,13 +139,14 @@ plot_assist = function (res1, res2 = NULL, oracle = NULL,
   grid(col = "lightgray", lty = "dotted", lwd = 1)
   
   polygon(c(x_vals, rev(x_vals)), c(q05_1, rev(q95_1)),
-          col = adjustcolor("gray", alpha.f = 0.6), border = NA)
-  lines(x_vals, mean1, col = "black", lwd = 2)
-  
+          col = adjustcolor("lightblue", alpha.f = 0.6), border = NA)
   if (!is.null(res2)) {
     polygon(c(x_vals, rev(x_vals)), c(q05_2, rev(q95_2)),
-            col = adjustcolor("gray", alpha.f = 0.6), border = NA)
-    lines(x_vals, mean2, col = "black", lwd = 2, lty = 2)
+            col = adjustcolor("lightsalmon", alpha.f = 0.6), border = NA)
+  }
+  lines(x_vals, mean1, col = "steelblue", lwd = 2)
+  if (!is.null(res2)) {
+    lines(x_vals, mean2, col = "firebrick", lwd = 2, lty = 2)
   }
   
   if (!is.null(oracle)) {
@@ -159,51 +160,53 @@ num_sim = 100
 
 # CASE SWITCHING HELPER
 # n = 50, p = 10
-# Case 1: s = 1, z_noise = 1; mu_type = 1
-# Case 2: s = 0.5, z_noise = 1.5; mu_type = 1
-# Case 3: s = 1.5, z_noise = 0.5; mu_type = 1
-# Case 4: s = 1, z_noise = 1; mu_type = 2
-# Case 5: s = 0.5, z_noise = 1.5; mu_type = 2
-# Case 6: s = 1.5, z_noise = 0.5; mu_type = 2
+# Case 1: alpha = 0.5, z_noise = 1.5; mu_type = 1 (base line)
+# Case 2: alpha = 0.2, z_noise = 1.5; mu_type = 1 (low signal)
+# Case 3: alpha = 0.8, z_noise = 1.5; mu_type = 1 (high signal)
+# Case 4: alpha = 0.5, z_noise = 1.5; mu_type = 2
+# Case 5: alpha = 0.2, z_noise = 1.5; mu_type = 2
+# Case 6: alpha = 0.8, z_noise = 1.5; mu_type = 2
 case_param = function (case) {
   if (case == 1) {
-    s = 1.0; z_noise = 1.0; mu_type = 1
+    alpha = 0.5; z_noise = 1.0; s = 1.5; mu_type = 1
   } else if (case == 2) {
-    s = 0.5; z_noise = 1.5; mu_type = 1
+    alpha = 0.2; z_noise = 1.0; s = 1.5; mu_type = 1
   } else if (case == 3) {
-    s = 1.5; z_noise = 0.5; mu_type = 1
+    alpha = 0.8; z_noise = 1.0; s = 1.5; mu_type = 1
   } else if (case == 4) {
-    s = 1.0; z_noise = 1.0; mu_type = 2
+    alpha = 0.5; z_noise = 1.0; s = 1.5; mu_type = 2
   } else if (case == 5) {
-    s = 0.5; z_noise = 1.5; mu_type = 2
+    alpha = 0.2; z_noise = 1.0; s = 1.5; mu_type = 2
   } else if (case == 6) {
-    s = 0.5; z_noise = 1.5; mu_type = 2
+    alpha = 0.8; z_noise = 1.0; s = 1.5; mu_type = 2
   } else {
     stop("case_param: unsupported case")
   } 
   
-  return (list("s" = s, "z_noise" = z_noise, "mu_type" = mu_type))
+  return (list("alpha" = alpha, "z_noise" = z_noise, "s" = s,
+               "mu_type" = mu_type))
 }
 
 for (case in 1:6) {
   cat("Case:", case, "...\n")
   parms = case_param(case)
   s = parms$s
+  alpha = parms$alpha
   z_noise = parms$z_noise
   mu_type = parms$mu_type
   par(mfrow = c(3, 3))
-  for (n in c(50, 100, 200)) {
-    for (p in c(10, 20, 40)) {
-      n_cores = detectCores() - 1
+  for (p in c(5, 10, 20)) {
+    for (n in c(50, 100, 200)) {
+      n_cores = 12 #detectCores() - 1
       cl = makeCluster(n_cores)
       registerDoParallel(cl)
       
       results = foreach(i = 1:num_sim, .packages = c("maotai", "expm", "deSolve"),
                         .inorder = FALSE) %dopar% {
                           dta = dta_gen_BWS(n = n + 200, p = p, mu_type = mu_type, r = 5,
-                                            s = s, z_noise = z_noise, alpha = 0.7)
+                                            s = s, z_noise = z_noise, alpha = alpha)
                           sim_res = main_BWS(dta$X, 10, test_size = 200, h = 6, batch_size = 16,
-                                             max.iter = 32, true_A = dta$A, true_mu = dta$mu)
+                                             max.iter = 16, true_A = dta$A, true_mu = dta$mu)
                           oracle_BWS = sum(geod_BWS(dta$X_nless, dta$X)^2) / sum(geod_BWS(dta$mu, dta$X)^2)
                           
                           sink()

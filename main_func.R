@@ -148,13 +148,13 @@ Frac_Var_LYB = function (x_test, factor_model, mu_hat,
       if (x.is.array) {
         for (m in 1:n) {
           temp = project_to_SPD(x_hat[m,,], epsilon)
-          res[i] = res[i] + geod_BWS_core(temp, x_test[m,,])^2
+          res[i] = res[i] + (Re(geod_BWS_core(temp, x_test[m,,])))^2
           if (i == 1) {
-            total_var = total_var + geod_BWS_core(mu_hat, x_test[m,,])^2
+            total_var = total_var + (Re(geod_BWS_core(mu_hat, x_test[m,,])))^2
           }
         }
       } else {
-        res[i] = geod_BWS_core(project_to_SPD(x_hat, epsilon), x_test)^2
+        res[i] = (Re(geod_BWS_core(project_to_SPD(x_hat, epsilon), x_test)))^2
       }
     } else if (evaluation_type == "Euclidean") {
       if (x.is.array) {
