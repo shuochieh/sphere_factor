@@ -1,5 +1,6 @@
 library(foreach)
 library(doParallel)
+source("./BWS_util.R")
 source("./main_func.R")
 
 t_isonormal_sampler = function (n, p, norm_cut = Inf, sd = 1) {
@@ -94,7 +95,7 @@ dta_gen_BWS = function (n, p, mu_type, r = 5,
 ### Test: Do not run
 # p = 10
 # n = 200
-# dta = dta_gen(n, "prototype", p = p)
+# dta = dta_gen(n, p = p)
 # res = main_BWS(dta$X, 10, batch_size = 30, max.iter = 10, true_A = dta$A, 
 #                true_mu = dta$mu, test_size = 0)
 # round(res$FVU_RFM_BWS, 3)
@@ -268,7 +269,7 @@ for (case in 1:6) {
 }
 
 
-### Below codes are defunct ###
+### Codes below are defunct ###
 ###########################
 # Fix p = 10, r = 5, vary n = 50, 100, 200
 #set.seed(5566)  
