@@ -38,7 +38,8 @@ subspace_d = function (U, V) {
 #' @param fraction returns fraction of variance unexplained; returns squared prediction errors if false
 #' 
 main_BWS = function (x, r, test_size = 0, h = 6, batch_size = NULL, max.iter = 100,
-                     true_A = NULL, true_mu = NULL, fraction = TRUE) {
+                     mu_hat = NULL, true_A = NULL, true_mu = NULL, fraction = TRUE,
+                     return_predictions = FALSE) {
   
   n = dim(x)[1]
   p = dim(x)[2]
@@ -55,16 +56,18 @@ main_BWS = function (x, r, test_size = 0, h = 6, batch_size = NULL, max.iter = 1
   }
   
   # estimate RFM
-  model = rfm_bws(x, r = r, h = h, batch_size = batch_size, max.iter = max.iter)
+  model = rfm_bws(x, r = r, h = h, batch_size = batch_size, max.iter = max.iter,
+                  mu_hat = mu_hat)
   V = model$A
   Factors = model$f_hat
   mu_hat = model$mu_hat
   E = model$E
   E_lyapunov = model$E_lyapunov
   r_hat_RFM = model$r_hat
+  z_bar = model$factor_model$mean
   
   # compare estimated loading space
-  if (!is.null(A)) {
+  if (!is.null(true_A)) {
     transported_V = array(NA, dim = c(p * (p + 1) / 2, r))
     subspace_dist = rep(NA, r)
     for (i in 1:r) {
@@ -80,11 +83,15 @@ main_BWS = function (x, r, test_size = 0, h = 6, batch_size = NULL, max.iter = 1
 
   # results
   if (test_size > 0) {
-    res1 = Frac_Var_bws(x_test, model, "BWS", fraction)
-    res2 = Frac_Var_bws(x_test, model, "Euclidean", fraction)
+    res1 = Frac_Var_bws(x_test, model, "BWS", fraction, 
+                        return_predictions = return_predictions)
+    res2 = Frac_Var_bws(x_test, model, "Euclidean", fraction, 
+                        return_predictions = return_predictions)
   } else {
-    res1 = Frac_Var_bws(x, model, "BWS", fraction)
-    res2 = Frac_Var_bws(x, model, "Euclidean", fraction)
+    res1 = Frac_Var_bws(x, model, "BWS", fraction, 
+                        return_predictions = return_predictions)
+    res2 = Frac_Var_bws(x, model, "Euclidean", fraction, 
+                        return_predictions = return_predictions)
   }
   
   # estimate linear factor model
@@ -97,18 +104,37 @@ main_BWS = function (x, r, test_size = 0, h = 6, batch_size = NULL, max.iter = 1
   r_hat_LYB = model$r_hat
   
   if (test_size > 0) {
-    res3 = Frac_Var_LYB(x_test, model, mu_hat, "BWS", fraction)
-    res4 = Frac_Var_LYB(x_test, model, mu_hat, "Euclidean", fraction)
+    res3 = Frac_Var_LYB(x_test, model, mu_hat, "BWS", fraction, 
+                        return_predictions = return_predictions)
+    res4 = Frac_Var_LYB(x_test, model, mu_hat, "Euclidean", fraction, 
+                        return_predictions = return_predictions)
   } else {
-    res3 = Frac_Var_LYB(x, model, mu_hat, "BWS", fraction)
-    res4 = Frac_Var_LYB(x, model, mu_hat, "Euclidean", fraction)
+    res3 = Frac_Var_LYB(x, model, mu_hat, "BWS", fraction, 
+                        return_predictions = return_predictions)
+    res4 = Frac_Var_LYB(x, model, mu_hat, "Euclidean", fraction, 
+                        return_predictions = return_predictions)
+  }
+  
+  if (return_predictions) {
+    return (list("mu_hat" = mu_hat, 
+                 "FVU_RFM_BWS" = res1$res, "FVU_RFM_Euc" = res2$res,
+                 "FVU_LYB_BWS" = res3$res, "FVU_LYB_Euc" = res4$res,
+                 "loading_dist" = subspace_dist,
+                 "r_hat_RFM" = r_hat_RFM, "r_hat_LYB" = r_hat_LYB,
+                 "Factors" = Factors, "z_bar" = z_bar,
+                 "V" = V, "E" = E, "E_lyapunov" = E_lyapunov,
+                 "RFM_xhat" = res1$xhat, 
+                 "LYB_xhat" = res3$xhat))
+    
   }
   
   return (list("mu_hat" = mu_hat, 
                "FVU_RFM_BWS" = res1, "FVU_RFM_Euc" = res2,
                "FVU_LYB_BWS" = res3, "FVU_LYB_Euc" = res4,
                "loading_dist" = subspace_dist,
-               "r_hat_RFM" = r_hat_RFM, "r_hat_LYB" = r_hat_LYB))
+               "r_hat_RFM" = r_hat_RFM, "r_hat_LYB" = r_hat_LYB,
+               "Factors" = Factors, "z_bar" = z_bar,
+               "V" = V, "E" = E, "E_lyapunov" = E_lyapunov))
 }
 
 #' Streamlined function for synthetic and real data analysis with (product-)sphere-valued

@@ -143,6 +143,7 @@ log_vec_construct = function (x, M, E_lyapunov = NULL) {
         log_x_vec[counter] = 0.5 * sum(diag(E_lyapunov[counter,,] %*% log_x))
       }
     }
+    log_x_vec = t(as.matrix(log_x_vec))
   } else {
     stop(paste("log_vec_construct: Incorrect dimensions", dim(x)))
   }
@@ -291,6 +292,9 @@ LYB_fm = function (x, r, h, demean = TRUE) {
   model = eigen(pd)
   Evec = model$vectors
   V = Evec[,1:r] # (d by r)
+  if (r == 1) {
+    V = as.matrix(V)
+  }
   evals = model$values
   
   # Extract factors and residuals
@@ -432,14 +436,17 @@ tan_basis_bws = function (Sigma) {
 #'  \item{mu_hat}{Estimated Fr\'{e}chet mean}
 #' } 
 #' @export
-rfm_bws = function (x, r, h = 6, batch_size = NULL, max.iter = 100) {
+rfm_bws = function (x, r, h = 6, batch_size = NULL, max.iter = 100,
+                    mu_hat = NULL) {
   n = dim(x)[1]
   p = dim(x)[2]
   
   # Estimate mu
-  mu_hat = mean_on_BWS(x, batch_size = batch_size, max.iter = max.iter,
-                       tau = 0.5, tol = -1, verbose = FALSE)
-  
+  if (is.null(mu_hat)) {
+    mu_hat = mean_on_BWS(x, batch_size = batch_size, max.iter = max.iter,
+                         tau = 0.5, tol = -1, verbose = FALSE)
+  }
+
   # Construct a set of orthonormal basis
   coord = tan_basis_bws(mu_hat)
   E = coord$E
@@ -464,14 +471,16 @@ rfm_bws = function (x, r, h = 6, batch_size = NULL, max.iter = 100) {
 #' @param x_test raw test data
 #' @param factor_model output from rfm_bws; an LYB_fm object
 #' @param evaluation_type to compute BWS distance or Euclidean (Frobenius distance)
-#' @param  fraction whether to return fraction of variance unexplained or squared prediction errors
+#' @param fraction whether to return fraction of variance unexplained or squared prediction errors
 #' 
-Frac_Var_bws = function (x_test, RFM_model, evaluation_type = "BWS", fraction = TRUE) {
+Frac_Var_bws = function (x_test, RFM_model, evaluation_type = "BWS", fraction = TRUE,
+                         return_predictions = FALSE) {
   
   mu_hat = RFM_model$mu_hat
   E = RFM_model$E
   E_lyapunov = RFM_model$E_lyapunov
   factor_model = RFM_model$factor_model
+  Factors = RFM_model$f_hat
   
   V = factor_model$V
   z_mean = factor_model$mean
@@ -541,6 +550,10 @@ Frac_Var_bws = function (x_test, RFM_model, evaluation_type = "BWS", fraction = 
     res = res / total_var
   }
   
+  if (return_predictions) {
+    return (list("res" = res, "xhat" = x_hat))
+  }
+  
   return (res)
 }
 
@@ -557,7 +570,7 @@ Frac_Var_bws = function (x_test, RFM_model, evaluation_type = "BWS", fraction = 
 #' 
 Frac_Var_LYB = function (x_test, factor_model, mu_hat,
                          evaluation_type = "BWS",
-                         fraction = TRUE,
+                         fraction = TRUE, return_predictions = FALSE,
                          epsilon = 1e-6) {
   V = factor_model$V
   z_mean = factor_model$mean
@@ -587,7 +600,7 @@ Frac_Var_LYB = function (x_test, factor_model, mu_hat,
   res = rep(0, r)
   total_var = 0
   for (i in 1:r) {
-    z_hat = predict_fm(V[,1:i], z_mean, z)
+    z_hat = predict_fm(as.matrix(V[,1:i]), z_mean, z)
     
     # predict
     if (x.is.array) {
@@ -633,14 +646,103 @@ Frac_Var_LYB = function (x_test, factor_model, mu_hat,
     res = res / total_var
   }
   
+  if (return_predictions) {
+    return (list("res" = res, "xhat" = x_hat))
+  }
+  
   return (res)
 }
 
 
+VAR1 <- function(X) {
+  X <- as.matrix(X)
+  k <- ncol(X)
+  df <- embed(X, 2)                    
+  Y <- df[, 1:k]                       
+  Z <- cbind(1, df[, -(1:k)])          
+  B <- solve(t(Z) %*% Z, t(Z) %*% Y)   
+  return(B)
+}
 
+#' This function is used internally to evaluate the factor models
+#' 
+#' Computes predictions of RFM on BWS, with factors predicted by VAR(1)
+#' 
+dyn_RFM = function (x, r, test_size = 1, h = 6, batch_size = NULL, max.iter = 100) {
+  
+  n = dim(x)[1]
+  p = dim(x)[2]
+  x_hat = array(NA, dim = c(test_size, p, p))
+  
+  for (m in 0:(test_size - 1)) {
+    x_train = x[1:(n - test_size + m),,]
+    x_test = x[c(1:(n - test_size + m)),,]
+    
+    # Get Factors
+    if (m == 0) {
+      aux = main_BWS(x, r = r, test_size = test_size - m, h = h,
+                     batch_size = batch_size, max.iter = max.iter)
+      Factors = aux$Factors
+      mu_hat = aux$mu_hat
+      E = aux$E
+      V = aux$V
+      z_bar = aux$z_bar
+    } else {
+      aux = main_BWS(x, r = r, test_size = test_size - m, h = h,
+                     batch_size = batch_size, max.iter = max.iter,
+                     mu_hat = mu_hat)
+      Factors = aux$Factors
+      E = aux$E
+      V = aux$V
+      z_bar = aux$z_bar
+    }
+    
+    # Predict factors
+    B = VAR1(Factors)
+    f_hat = as.vector(c(1, tail(Factors, 1)) %*% B)
+    
+    # predict 
+    z_hat = V %*% f_hat + z_bar
+    temp = log_to_tangent(z_hat, E)
+    x_hat[m + 1,,] = Exp_BWS(temp, mu_hat)
+    
+    cat("dyn_RFM: iteration", m, "\n")
+  }
+  
+  return (x_hat)
+}
 
-
-
+dyn_LFM = function (x, r, test_size = 1, h = 6) {
+  n = dim(x)[1]
+  p = dim(x)[2]
+  x_hat = array(NA, dim = c(test_size, p, p))
+  
+  x_vector = array(NA, dim = c(n, p * (p + 1) / 2))
+  for (m in 1:n) {
+    x_vector[m,] = symmetric_to_vector(x[m,,])
+  }
+  
+  for (m in 0:(test_size - 1)) {
+    x_train = x_vector[1:(n - test_size + m),]
+    
+    # Get factors
+    aux = LYB_fm(x_train, r = r, h = h)
+    Factors = aux$f_hat
+    V = aux$V
+    zbar = aux$mean
+    
+    
+    # predict factors
+    B = VAR1(Factors)
+    f_hat = as.vector(c(1, tail(Factors, 1)) %*% B)
+    
+    # predict
+    z_hat = V %*% f_hat + zbar
+    x_hat[m + 1,,] = vector_to_symmetric(z_hat, p)
+  }
+  
+  return (x_hat)
+}
 
 
 
