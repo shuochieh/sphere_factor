@@ -1,8 +1,7 @@
-library(tidyr)
-library(ggplot2)
-library(reshape2)
 library(MASS)
+library(reshape2)
 library(gridExtra)
+library(ggplot2)
 source("./main_func.R")
 source("./BWS_util.R")
 
@@ -215,6 +214,7 @@ for (k in 1:15) {
   }
 }
 
+par(mfrow = c(1, 2))
 plot_assist(diag_loss[2,] / diag_loss[1,], res2 = offdiag_loss[2,] / offdiag_loss[1,],
             ylim = c(0.7, 1.3), x_vals = 1:15,
             labs = c("number of factors", "ratio"))
@@ -261,7 +261,7 @@ for (i in 1:2) {
   if (i == 1) {
     Exp_V = Exp_BWS(log_to_tangent(results$V[,i], results$E), results$mu_hat)
   } else {
-    Exp_V = Exp_BWS(log_to_tangent(results$V[,i], results$E), results$mu_hat)
+    Exp_V = Exp_BWS(-log_to_tangent(results$V[,i], results$E), results$mu_hat)
   }
   Exp_V = Exp_V[c(1, 2, 3, 9, 4, 13, 5, 8, 11, 6, 7, 10, 12),]
   Exp_V = Exp_V[,c(1, 2, 3, 9, 4, 13, 5, 8, 11, 6, 7, 10, 12)]
@@ -273,48 +273,14 @@ for (i in 1:2) {
 
 grid.arrange(ps[[1]], ps[[2]], ncol = 2)
 
-
-# Baselines
-# random_walk_loss = 0
-# for (i in 1:36) {
-#   truth = dta[dim(dta)[1] - 36 + i,,]
-#   rw = dta[dim(dta)[1] - 36 + i - 1,,]
-#   random_walk_loss = random_walk_loss + norm(rw - truth, "F")^2
-# }
-# overall_cov_loss = diag_loss[2,] + 2 * offdiag_loss[2,]
-# random_walk_loss
-# overall_cov_loss
-# par(mfrow = c(1, 1))
-# plot_assist(res1 = sqrt(overall_cov_loss / 36),
-#             oracle = sqrt(random_walk_loss / 36),
-#             ylim = range(sqrt(c(c(overall_cov_loss / 36), random_walk_loss / 36))))
-
 ### Out-of-sample factor forecasting
 
-r = 1
-RFM_res = dyn_RFM(dta, r = r, test_size = 36, h = 6, batch_size = 30)
-LFM_res = dyn_LFM(dta, r = r, test_size = 36, h = 6)
+RFM_res = dyn_RFM(dta, r = 1, test_size = 36, h = 6, batch_size = 30)
+LFM_res = dyn_LFM(dta, r = 1, test_size = 36, h = 6)
 
 cos_dist = array(NA, dim = c(13, 3, 36))
-ev_error = array(NA, dim = c(13, 3, 36))
 BWS_errors = array(NA, dim = c(3, 36))
 for (m in 1:36) {
-  
-  # Riemannian factor model
-  # Sigma_hat = RFM_res[m,,]
-  # temp = ginv(Sigma_hat)
-  # weights = c(temp %*% rep(1, 13)) / c((rep(1, 13) %*% temp %*% rep(1, 13)))
-  # portfolio_variance[1,m] = c(t(weights) %*% dta[(300 - 36 + m),,] %*% weights)
-  # Linear factor model
-  # Sigma_hat = LFM_res[m,,] # project_to_SPD(LFM_res[m,,], 0.0)
-  # temp = ginv(Sigma_hat)
-  # weights = c(temp %*% rep(1, 13)) / c((rep(1, 13) %*% temp %*% rep(1, 13)))
-  # portfolio_variance[2,m] = c(t(weights) %*% dta[(300 - 36 + m),,] %*% weights)
-  # Random walk model
-  # Sigma_hat = dta[(300- 36 + m - 1),,]
-  # temp = ginv(Sigma_hat)
-  # weights = c(temp %*% rep(1, 13)) / c((rep(1, 13) %*% temp %*% rep(1, 13)))
-  # portfolio_variance[3,m] = c(t(weights) %*% dta[(300 - 36 + m),,] %*% weights)
   
   truth0 = dta[(300 - 36 + m),,]
   truth = eigen(truth0)
@@ -325,8 +291,6 @@ for (m in 1:36) {
     temp = eigen(Sigma_hat)
     v = as.matrix(temp$vectors[,1:k])
     cos_dist[k,1,m] = subspace_d(v, truth$vectors[,1:k])
-    # cos_dist[k,1,m] = abs(c(v[,k] %*% truth$vectors[,k]))
-    ev_error[k,1,m] = (temp$values[1] - truth$values[1])^2
     if (k == 1) {
       BWS_errors[1,m] = geod_BWS_core(Sigma_hat, truth0)^2
     }
@@ -336,8 +300,6 @@ for (m in 1:36) {
     temp = eigen(Sigma_hat)
     v = as.matrix(temp$vectors[,1:k])
     cos_dist[k,2,m] = subspace_d(v, truth$vectors[,1:k])
-    # cos_dist[k,2,m] = abs(c(v[,k] %*% truth$vectors[,k]))
-    ev_error[k,2,m] = (temp$values[1] - truth$values[1])^2
     if (k == 1) {
       BWS_errors[2,m] = geod_BWS_core(project_to_SPD(Sigma_hat), truth0)^2
     }
@@ -347,8 +309,6 @@ for (m in 1:36) {
     temp = eigen(Sigma_hat)
     v = as.matrix(temp$vectors[,1:k])
     cos_dist[k,3,m] = subspace_d(v, truth$vectors[,1:k])
-    ev_error[k,3,m] = (temp$values[1] - truth$values[1])^2
-    # cos_dist[k,3,m] = abs(c(v[,k] %*% truth$vectors[,k]))
     if (k == 1) {
       BWS_errors[3,m] = geod_BWS_core(Sigma_hat, truth0)^2
     }
@@ -432,10 +392,63 @@ legend("bottomright",
                   paste0("LFM (Mean = ", round(rowMeans(sqrt(BWS_errors))[2], 2), ")"), 
                   paste0("LOCF (Mean = ", round(rowMeans(sqrt(BWS_errors))[3], 2), ")")),
        col = c("lightblue", "lightsalmon", "darkseagreen1"),
-       lty = c(1, 2, 4), lwd = 0.01,
+       lty = c(1, 2, 4), lwd = 0.00,
        pch = c(19, 17, 23), bty = "n",
        pt.bg = c(NULL, NULL, "darkseagreen1"))
-print(rowMeans(BWS_errors))
+
+risk_error = array(NA, dim = c(3, 36))
+for (m in 1:36) {
+  truth = dta[(300 - 36 + m),,]
+  truth_lag = dta[(300 - 36 + m - 1),,]
+  w = solve(truth_lag) %*% rep(1, 13)
+  w = w / sum(w)
+  true_risk = c(t(w) %*% truth %*% w)
+  
+  # Riemannian factor model
+  Sigma_hat = RFM_res[m,,]
+  predicted_risk = c(t(w) %*% Sigma_hat %*% w)
+  risk_error[1,m] = (predicted_risk - true_risk)^2
+  
+  # Linear factor model
+  Sigma_hat = LFM_res[m,,]
+  predicted_risk = c(t(w) %*% Sigma_hat %*% w)
+  risk_error[2,m] = (predicted_risk - true_risk)^2
+  
+  # Random walk model
+  Sigma_hat = dta[(300- 36 + m - 1),,]
+  predicted_risk = c(t(w) %*% Sigma_hat %*% w)
+  risk_error[3,m] = (predicted_risk - true_risk)^2
+}
+risk_error = sqrt(risk_error)
+x_dates = seq(from = as.Date("2000-01-01"), to = as.Date("2024-12-01"), by = "month")[265:300]
+plot(x = x_dates,
+     y = risk_error[1,],
+     type = "n", ylim = c(0, 12),
+     xlab = "", ylab = "risk prediction error", bty = "L")
+grid(col = "lightgray", lty = "dotted", lwd = 1)
+
+lines(x_dates, risk_error[1,], col = "steelblue", lwd = 2)
+points(x_dates, risk_error[1,], col = "lightblue", pch = 19, cex = 0.8)
+lines(x_dates, risk_error[2,], col = "firebrick", lwd = 1.5, lty = 2)
+points(x_dates, risk_error[2,], col = "lightsalmon", pch = 17, cex = 0.8)
+lines(x_dates, risk_error[3,], col = "darkseagreen4", lwd = 1.5, lty = 4)
+points(x_dates, risk_error[3,], col = "darkseagreen1", bg = "darkseagreen1",
+       pch = 23, cex = 0.8)
+
+legend("topright",
+       legend = c(paste0("RFM (Mean = ", round(mean(risk_error[1,]), 2), ")"), 
+                  paste0("LFM (Mean = ", round(mean(risk_error[2,]), 2), ")"), 
+                  paste0("LOCF (Mean = ", round(mean(risk_error[3,]), 2), ")")),
+       col = c("steelblue", "firebrick", "darkseagreen4"),
+       lty = c(1, 2, 4), lwd = c(2, 1.5, 1.5), bty = "n")
+legend("topright",
+       legend = c(paste0("RFM (Mean = ", round(mean(risk_error[1,]), 2), ")"), 
+                  paste0("LFM (Mean = ", round(mean(risk_error[2,]), 2), ")"), 
+                  paste0("LOCF (Mean = ", round(mean(risk_error[3,]), 2), ")")),
+       col = c("lightblue", "lightsalmon", "darkseagreen1"),
+       lty = c(1, 2, 4), lwd = 0.00,
+       pch = c(19, 17, 23), bty = "n",
+       pt.bg = c(NULL, NULL, "darkseagreen1"))
 
 
 
