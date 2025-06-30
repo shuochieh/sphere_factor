@@ -60,10 +60,10 @@ cat_assist = function (x, type = 1) {
   return (res)
 }
 
-par(mfrow = c(3, 3))
-for (case in 1:6) {
-  for (n in c(50, 100, 200)) {
-    for (p in c(5, 10, 20)) {
+par(mfrow = c(2, 3))
+for (case in c(2, 3, 5, 6)) {
+  for (p in c(5, 10)) {
+    for (n in c(50, 100, 200)) {
       e <- new.env()
       load(paste0("./save/FVU_RFM_BWS_n", n, "_p", p, "_case", case, ".RData"), envir = e)
       FVU_RFM_BWS = Re(e$FVU_RFM_BWS)
@@ -85,8 +85,8 @@ for (case in 1:6) {
           "SD:", round(sd(oracle_BWS * 100), 1), "\n\n")
       
       plot_assist(FVU_RFM_BWS, res2 = FVU_LYB_BWS, oracle = mean(oracle_BWS), 
-                  labs = c("number of factors", "Geodesic FVU"), ylim = c(0.1, 1),
-                  main = paste0("n = ", n, "; p = ", p))
+                  labs = c("number of factors", "rGMSE"), ylim = c(0.1, 1),
+                  main = paste0("n = ", n, "; q = ", p))
     }
   }
 }
@@ -122,12 +122,12 @@ for (case in 1:6) {
 }
 
 dev.off()
-par(mfrow = c(3, 3))
-for (case in 1:6) {
+par(mfrow = c(2, 2))
+for (case in c(2, 3, 5, 6)) {
   ns = c(50, 100, 200)
-  ps = c(5, 10, 20)
-  for (p_i in 1:3) {
-    loading_d_all = array(NA, dim = c(100, 3))
+  ps = c(5, 10)
+  for (p_i in 1:2) {
+    loading_d_all = array(NA, dim = c(300, 3))
     for (n_i in 1:3) {
       n = ns[n_i] ; p = ps[p_i]
       
@@ -161,9 +161,9 @@ for (case in 1:6) {
 }
 
 dev.off()
-for (case in 1:6) {
-  for (n in c(50, 100, 200)) {
-    for (p in c(5, 10, 20)) {
+for (case in c(2, 3, 5, 6)) {
+  for (p in c(5, 10)) {
+    for (n in c(50, 100, 200)) {
       e <- new.env()
       load(paste0("./save/r_hat_RFM_n", n, "_p", p, "_case", case, ".RData"), envir = e)
       r_hat_RFM = Re(e$r_hat_RFM)

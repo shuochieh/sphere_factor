@@ -164,7 +164,7 @@ plot_assist = function (res1, res2 = NULL, oracle = NULL,
 } 
 
 ###########################
-num_sim = 100
+num_sim = 300
 
 # CASE SWITCHING HELPER
 # Case 1: alpha = 0.5, z_noise = 0.5 (base line)

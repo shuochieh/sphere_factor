@@ -94,7 +94,7 @@ plot_assist = function (res1, res2 = NULL, oracle = NULL, x_vals = NULL,
   }
 } 
 
-heat_plot = function (A, i, lims) {
+heat_plot = function (A, main, lims) {
   df = melt(A)
   colnames(df) = c("Row", "Column", "Value")
   
@@ -105,13 +105,13 @@ heat_plot = function (A, i, lims) {
   
   hm = ggplot(df, aes(Column, Row, fill = Value)) +
     geom_tile() +
-    # scale_fill_gradient2(low = "steelblue", mid = "white", high = "firebrick", 
+    # scale_fill_gradient2(low = "lightblue3", mid = "white", high = "darkred",
     #                      midpoint = mid_point, limits = lims) +
     scale_fill_gradient2(low = "white", high = "darkred", limits = lims) +
     theme_minimal() +
     coord_fixed() +  
     labs(x = "", y = "", fill = "", 
-         title = paste("Loading matrix", i)) +
+         title = main) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
   
   return (hm)
@@ -136,6 +136,14 @@ rm("temp")
 dta = dta * 10000 # Convert to percentage points
 overall_covariance_training = overall_covariance_training * 10000
 
+# Use only observations from 2010--2019
+# dta_dates = seq(from = as.Date("2000-01-01"), to = as.Date("2024-12-01"), by = "month")[109:240]
+# dta = dta[109:240,,]
+
+# Use observations from 2000--2019
+dta_dates = seq(from = as.Date("2000-01-01"), to = as.Date("2024-12-01"), by = "month")[1:240]
+dta = dta[1:240,,]
+
 # mu = mean_on_BWS(dta, tau = 0.5, max.iter = 100, batch_size = NULL, verbose = TRUE)
 # tsp = plot_time_series(x = data.frame(Time = seq(from = as.Date("2000-01-01"), to = as.Date("2024-12-01"), by = "month"),
 #                                       "Geodesic distance to Frechet mean" = geod_BWS(dta, mu),
@@ -156,10 +164,12 @@ overall_covariance_training = overall_covariance_training * 10000
 #      type = "l", ylab = "", xlab="", 
 #      main = "Geodesic distance to the Frechet mean")
 
-results = main_BWS(dta, r = 15, test_size = 36, h = 6, batch_size = 30, 
+results = main_BWS(dta, r = 15, test_size = 36, h = 3, batch_size = 30, 
                    max.iter = 100, return_predictions = TRUE)
+
+par(mfrow = c(1, 1))
 plot_assist(results$FVU_RFM_BWS, res2 = results$FVU_LYB_BWS,
-            labs = c("number of factors", "FUGV"), ylim = c(0.2, 1))
+            labs = c("number of factors", "relative GMSE"), ylim = c(0.2, 1))
 legend("topright",
        legend = c("RFM", "LFM"),
        col = c("steelblue", "firebrick"),
@@ -171,7 +181,7 @@ legend("topright",
        pch = c(19, 17), bty = "n")
 
 plot_assist(results$FVU_RFM_Euc, res2 = results$FVU_LYB_Euc,
-            labs = c("number of factors", "FUV"), ylim = c(0.2, 1.0))
+            labs = c("number of factors", "relative MSE"), ylim = c(0.0, 1.0))
 legend("topright",
        legend = c("RFM", "LFM"),
        col = c("steelblue", "firebrick"),
@@ -199,7 +209,7 @@ diag_loss = array(0, dim = c(2, 15))
 offdiag_loss = array(0, dim = c(2, 15))
 for (k in 1:15) {
   for (i in 1:36) {
-    truth = dta[(300 - 36 + i),,]
+    truth = dta[(length(dta_dates) - 36 + i),,]
     prediction = LFM_xhat[k,i,,] # project_to_SPD(LFM_xhat[k,i,,])
     e = truth - prediction
     
@@ -216,7 +226,7 @@ for (k in 1:15) {
 
 par(mfrow = c(1, 2))
 plot_assist(diag_loss[2,] / diag_loss[1,], res2 = offdiag_loss[2,] / offdiag_loss[1,],
-            ylim = c(0.7, 1.3), x_vals = 1:15,
+            ylim = c(0.7, 2.0), x_vals = 1:15,
             labs = c("number of factors", "ratio"))
 legend("topright",
        legend = c("Diagonal", "Off-diagonal"),
@@ -230,7 +240,7 @@ legend("topright",
 
 plot_assist(sqrt((diag_loss[2,] + 2 * offdiag_loss[2,]) / 2), 
             res2 = sqrt((diag_loss[1,] + 2 * offdiag_loss[1,]) / 2),
-            ylim = c(40, 75), x_vals = 1:15,
+            ylim = c(20, 75), x_vals = 1:15,
             labs = c("number of factors", "Frobenius errors"))
 legend("topright",
        legend = c("RFM", "LFM"),
@@ -245,33 +255,60 @@ legend("topright",
 
 par(mfrow = c(2, 3))
 for (j in 1:6) {
-  plot(x = seq(from = as.Date("2000-01-01"), to = as.Date("2024-12-01"), by = "month")[1:264],
+  plot(x = dta_dates[1:(length(dta_dates) - 36)],
        y = results$Factors[,j],
        type = "l",
        xlab = "", ylab = "",
        col = "steelblue",
        main = paste("Factor", j), 
        bty = "L")
-  year_starts = seq(from = as.Date("2000-01-01"), to = as.Date("2024-01-01"), by = "5 years")
+  year_starts = seq(from = as.Date(dta_dates[1]), to = as.Date(dta_dates[length(dta_dates) - 36]), by = "year")
   abline(v = year_starts, col = "lightgray", lty = "dotted", lwd = 1)
 }
 
 ps = NULL
-for (i in 1:2) {
-  if (i == 1) {
-    Exp_V = Exp_BWS(log_to_tangent(results$V[,i], results$E), results$mu_hat)
+for (i in 1:10) {
+  grid = seq(from = -1.0, to = 1.0, length.out = 5)
+  if (i <= 5) {
+    inc = grid[i]
+    Exp_V = Exp_BWS(log_to_tangent(inc * results$V[,1], results$E), results$mu_hat)
   } else {
-    Exp_V = Exp_BWS(-log_to_tangent(results$V[,i], results$E), results$mu_hat)
+    inc = grid[i - 5]
+    Exp_V = Exp_BWS(log_to_tangent(inc * results$V[,2], results$E), results$mu_hat)
   }
+  
   Exp_V = Exp_V[c(1, 2, 3, 9, 4, 13, 5, 8, 11, 6, 7, 10, 12),]
   Exp_V = Exp_V[,c(1, 2, 3, 9, 4, 13, 5, 8, 11, 6, 7, 10, 12)]
   # diag(Exp_V) = 0
   rownames(Exp_V) = selected_companies[c(1, 2, 3, 9, 4, 13, 5, 8, 11, 6, 7, 10, 12)]
   colnames(Exp_V) = selected_companies[c(1, 2, 3, 9, 4, 13, 5, 8, 11, 6, 7, 10, 12)]
-  ps[[i]] = heat_plot(Exp_V, i, lims = c(0, 15))
+  if (i < 5) {
+    ps[[i]] = heat_plot(Exp_V, paste("t =", inc), lims = c(0, 15)) + 
+      theme(legend.position = "none") +
+      theme(plot.margin = unit(c(0.0, 0.2, 0.0, 0.0), "cm")) + 
+      theme(axis.text.y = element_blank())
+  } else if (i == 5) {
+      ps[[i]] = heat_plot(Exp_V, paste("t =", inc), lims = c(0, 15)) +
+        theme(legend.position = "none") +
+        theme(plot.margin = unit(c(0.0, 0.2, 0.0, 0.0), "cm")) + 
+        theme(axis.text.y = element_blank())
+  } else if (i < 10) {
+    ps[[i]] = heat_plot(Exp_V, paste("t =", inc), lims = c(0, 15)) + 
+      theme(legend.position = "none") +
+      theme(plot.margin = unit(c(0.0, 0.2, 0.0, 0.0), "cm")) + 
+      theme(axis.text.y = element_blank())
+  } else {
+    ps[[i]] = heat_plot(Exp_V, paste("t =", inc), lims = c(0, 15)) +
+      theme(legend.position = "none") +
+      theme(plot.margin = unit(c(0.0, 0.2, 0.0, 0.0), "cm")) + 
+      theme(axis.text.y = element_blank())
+  }
 }
 
-grid.arrange(ps[[1]], ps[[2]], ncol = 2)
+grid.arrange(grobs = ps[1:5], nrow = 1, ncol = 5)
+grid.arrange(grobs = ps[6:10], nrow = 1, ncol = 5)
+# grid.arrange(grobs = ps, nrow = 2, ncol = 9)
+# grid.arrange(ps[[1]], ps[[2]], ncol = 2)
 
 ### Out-of-sample factor forecasting
 
@@ -282,7 +319,7 @@ cos_dist = array(NA, dim = c(13, 3, 36))
 BWS_errors = array(NA, dim = c(3, 36))
 for (m in 1:36) {
   
-  truth0 = dta[(300 - 36 + m),,]
+  truth0 = dta[(length(dta_dates) - 36 + m),,]
   truth = eigen(truth0)
 
   for (k in 1:13) {
@@ -296,7 +333,7 @@ for (m in 1:36) {
     }
 
     # Linear factor model
-    Sigma_hat = LFM_res[m,,]
+    Sigma_hat = project_to_SPD(LFM_res[m,,], 1e-6)
     temp = eigen(Sigma_hat)
     v = as.matrix(temp$vectors[,1:k])
     cos_dist[k,2,m] = subspace_d(v, truth$vectors[,1:k])
@@ -305,7 +342,7 @@ for (m in 1:36) {
     }
 
     # Random walk model
-    Sigma_hat = dta[(300- 36 + m - 1),,]
+    Sigma_hat = dta[(length(dta_dates) - 36 + m - 1),,]
     temp = eigen(Sigma_hat)
     v = as.matrix(temp$vectors[,1:k])
     cos_dist[k,3,m] = subspace_d(v, truth$vectors[,1:k])
@@ -367,10 +404,10 @@ for (k in c(1:3)) {
 }
 
 par(mfrow = c(1, 1))
-x_dates = seq(from = as.Date("2000-01-01"), to = as.Date("2024-12-01"), by = "month")[265:300]
+x_dates = tail(dta_dates, 36)
 plot(x = x_dates, 
      y = sqrt(BWS_errors[1,]), type = "n",
-     ylim = c(0, 5), 
+     ylim = c(0, 6), 
      xlab = "", ylab = "BW distance", bty = "L")
 grid(col = "lightgray", lty = "dotted", lwd = 1)
 lines(x_dates, sqrt(BWS_errors[1,]), col = "steelblue", lwd = 2)
@@ -382,15 +419,15 @@ points(x_dates, sqrt(BWS_errors[3,]), pch = 23, col = "darkseagreen1",
        bg = "darkseagreen1")
 
 legend("bottomright",
-       legend = c(paste0("RFM (Mean = ", round(rowMeans(sqrt(BWS_errors))[1], 2), ")"), 
-                  paste0("LFM (Mean = ", round(rowMeans(sqrt(BWS_errors))[2], 2), ")"), 
-                  paste0("LOCF (Mean = ", round(rowMeans(sqrt(BWS_errors))[3], 2), ")")),
+       legend = c(paste0("RFM (Mean = ", round(rowMeans(sqrt(BWS_errors))[1], 2), "; Median = ", round(median(sqrt(BWS_errors[1,])), 2), ")"), 
+                  paste0("LFM (Mean = ", round(rowMeans(sqrt(BWS_errors))[2], 2), "; Median = ", round(median(sqrt(BWS_errors[2,])), 2), ")"), 
+                  paste0("LOCF (Mean = ", round(rowMeans(sqrt(BWS_errors))[3], 2), "; Median = ", round(median(sqrt(BWS_errors[3,])), 2), ")")),
        col = c("steelblue", "firebrick", "darkseagreen4"),
        lty = c(1, 2, 4), lwd = c(2, 1.5, 1.5), bty = "n")
 legend("bottomright",
-       legend = c(paste0("RFM (Mean = ", round(rowMeans(sqrt(BWS_errors))[1], 2), ")"), 
-                  paste0("LFM (Mean = ", round(rowMeans(sqrt(BWS_errors))[2], 2), ")"), 
-                  paste0("LOCF (Mean = ", round(rowMeans(sqrt(BWS_errors))[3], 2), ")")),
+       legend = c(paste0("RFM (Mean = ", round(rowMeans(sqrt(BWS_errors))[1], 2), "; Median = ", round(median(sqrt(BWS_errors[1,])), 2), ")"), 
+                  paste0("LFM (Mean = ", round(rowMeans(sqrt(BWS_errors))[2], 2), "; Median = ", round(median(sqrt(BWS_errors[2,])), 2), ")"), 
+                  paste0("LOCF (Mean = ", round(rowMeans(sqrt(BWS_errors))[3], 2), "; Median = ", round(median(sqrt(BWS_errors[3,])), 2), ")")),
        col = c("lightblue", "lightsalmon", "darkseagreen1"),
        lty = c(1, 2, 4), lwd = 0.00,
        pch = c(19, 17, 23), bty = "n",
@@ -398,8 +435,8 @@ legend("bottomright",
 
 risk_error = array(NA, dim = c(3, 36))
 for (m in 1:36) {
-  truth = dta[(300 - 36 + m),,]
-  truth_lag = dta[(300 - 36 + m - 1),,]
+  truth = dta[(length(dta_dates) - 36 + m),,]
+  truth_lag = dta[(length(dta_dates) - 36 + m - 1),,]
   w = solve(truth_lag) %*% rep(1, 13)
   w = w / sum(w)
   true_risk = c(t(w) %*% truth %*% w)
@@ -410,20 +447,21 @@ for (m in 1:36) {
   risk_error[1,m] = (predicted_risk - true_risk)^2
   
   # Linear factor model
-  Sigma_hat = LFM_res[m,,]
+  Sigma_hat = project_to_SPD(LFM_res[m,,], 1e-6)
   predicted_risk = c(t(w) %*% Sigma_hat %*% w)
   risk_error[2,m] = (predicted_risk - true_risk)^2
   
   # Random walk model
-  Sigma_hat = dta[(300- 36 + m - 1),,]
+  Sigma_hat = dta[(length(dta_dates) - 36 + m - 1),,]
   predicted_risk = c(t(w) %*% Sigma_hat %*% w)
   risk_error[3,m] = (predicted_risk - true_risk)^2
 }
+# risk_error = sqrt(risk_error)
 risk_error = sqrt(risk_error)
-x_dates = seq(from = as.Date("2000-01-01"), to = as.Date("2024-12-01"), by = "month")[265:300]
+x_dates = tail(dta_dates, 36)
 plot(x = x_dates,
      y = risk_error[1,],
-     type = "n", ylim = c(0, 12),
+     type = "n", ylim = c(0, 20),
      xlab = "", ylab = "risk prediction error", bty = "L")
 grid(col = "lightgray", lty = "dotted", lwd = 1)
 
@@ -436,19 +474,20 @@ points(x_dates, risk_error[3,], col = "darkseagreen1", bg = "darkseagreen1",
        pch = 23, cex = 0.8)
 
 legend("topright",
-       legend = c(paste0("RFM (Mean = ", round(mean(risk_error[1,]), 2), ")"), 
-                  paste0("LFM (Mean = ", round(mean(risk_error[2,]), 2), ")"), 
-                  paste0("LOCF (Mean = ", round(mean(risk_error[3,]), 2), ")")),
+       legend = c(paste0("RFM (Mean = ", round(mean(risk_error[1,]), 2), "; Median = ", round(median(risk_error[1,]), 2), ")"), 
+                  paste0("LFM (Mean = ", round(mean(risk_error[2,]), 2), "; Median = ", round(median(risk_error[2,]), 2), ")"), 
+                  paste0("LOCF (Mean = ", round(mean(risk_error[3,]), 2), "; Median = ", round(median(risk_error[3,]), 2), ")")),
        col = c("steelblue", "firebrick", "darkseagreen4"),
-       lty = c(1, 2, 4), lwd = c(2, 1.5, 1.5), bty = "n")
+       lty = c(1, 2, 4), lwd = c(2, 1.5, 1.5), bty = "n",
+       cex = 0.8)
 legend("topright",
-       legend = c(paste0("RFM (Mean = ", round(mean(risk_error[1,]), 2), ")"), 
-                  paste0("LFM (Mean = ", round(mean(risk_error[2,]), 2), ")"), 
-                  paste0("LOCF (Mean = ", round(mean(risk_error[3,]), 2), ")")),
-       col = c("lightblue", "lightsalmon", "darkseagreen1"),
+       legend = c(paste0("RFM (Mean = ", round(mean(risk_error[1,]), 2), "; Median = ", round(median(risk_error[1,]), 2), ")"), 
+                  paste0("LFM (Mean = ", round(mean(risk_error[2,]), 2), "; Median = ", round(median(risk_error[2,]), 2), ")"), 
+                  paste0("LOCF (Mean = ", round(mean(risk_error[3,]), 2), "; Median = ", round(median(risk_error[3,]), 2), ")")),       col = c("lightblue", "lightsalmon", "darkseagreen1"),
        lty = c(1, 2, 4), lwd = 0.00,
        pch = c(19, 17, 23), bty = "n",
-       pt.bg = c(NULL, NULL, "darkseagreen1"))
+       pt.bg = c(NULL, NULL, "darkseagreen1"),
+       cex = 0.8)
 
 
 

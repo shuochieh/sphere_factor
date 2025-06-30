@@ -36,7 +36,7 @@ for (case in c(1:1)) {
           "SD:", round(sd(oracle_Sphere * 100), 1), "\n\n")
       
       plot_assist(FVU_RFM_Sphere, res2 = FVU_LYB_Sphere, oracle = mean(oracle_Sphere), 
-                  labs = c("number of factors", "Geodesic FVU"), ylim = c(0.0, 1),
+                  labs = c("number of factors", "rMSE"), ylim = c(0.0, 1),
                   main = paste0("n = ", n, "; q = ", p))
     }
   }
@@ -122,8 +122,8 @@ for (case in 1:1) {
 
 dev.off()
 for (case in 1:1) {
-  for (n in c(50, 100, 200)) {
-    for (p in c(5, 10, 20)) {
+  for (p in c(5, 10, 20)) {
+    for (n in c(50, 100, 200)) {
       e <- new.env()
       load(paste0("./save/r_hat_RFM_Sphere_n", n, "_d", p, "_case", case, ".RData"), envir = e)
       r_hat_RFM = Re(e$r_hat_RFM)
