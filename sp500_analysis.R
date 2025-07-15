@@ -118,7 +118,8 @@ heat_plot = function (A, main, lims) {
 }
 
 
-dta = load("./sp500_covariance/sp500_13.RData")
+# dta = load("./sp500_covariance/sp500_13.RData")
+dta = load("./sp500_covariance/sp500_12bySector.RData")
 dta = covariances
 rm("covariances")
 
@@ -135,6 +136,7 @@ rm("temp")
 
 dta = dta * 10000 # Convert to percentage points
 overall_covariance_training = overall_covariance_training * 10000
+q = length(selected_companies)
 
 # Use only observations from 2010--2019
 # dta_dates = seq(from = as.Date("2000-01-01"), to = as.Date("2024-12-01"), by = "month")[109:240]
@@ -192,8 +194,8 @@ legend("topright",
        lty = c(1, 1), lwd = 0.01,
        pch = c(19, 17), bty = "n")
 
-RFM_xhat = array(NA, dim = c(15, 36, 13, 13))
-LFM_xhat = array(NA, dim = c(15, 36, 13, 13))
+RFM_xhat = array(NA, dim = c(15, 36, q, q))
+LFM_xhat = array(NA, dim = c(15, 36, q, q))
 for (k in 1:15) {
   results = main_BWS(dta, r = k, test_size = 36, h = 6, batch_size = 30, max.iter = 100,
                      return_predictions = TRUE)
@@ -312,17 +314,17 @@ grid.arrange(grobs = ps[6:10], nrow = 1, ncol = 5)
 
 ### Out-of-sample factor forecasting
 
-RFM_res = dyn_RFM(dta, r = 1, test_size = 36, h = 6, batch_size = 30)
-LFM_res = dyn_LFM(dta, r = 1, test_size = 36, h = 6)
+RFM_res = dyn_RFM(dta, r = 2, test_size = 36, h = 6, batch_size = 30)
+LFM_res = dyn_LFM(dta, r = 2, test_size = 36, h = 6)
 
-cos_dist = array(NA, dim = c(13, 3, 36))
+cos_dist = array(NA, dim = c(q, 3, 36))
 BWS_errors = array(NA, dim = c(3, 36))
 for (m in 1:36) {
   
   truth0 = dta[(length(dta_dates) - 36 + m),,]
   truth = eigen(truth0)
 
-  for (k in 1:13) {
+  for (k in 1:q) {
     # Riemannian factor model
     Sigma_hat = RFM_res[m,,]
     temp = eigen(Sigma_hat)
@@ -437,7 +439,7 @@ risk_error = array(NA, dim = c(3, 36))
 for (m in 1:36) {
   truth = dta[(length(dta_dates) - 36 + m),,]
   truth_lag = dta[(length(dta_dates) - 36 + m - 1),,]
-  w = solve(truth_lag) %*% rep(1, 13)
+  w = solve(truth_lag) %*% rep(1, q)
   w = w / sum(w)
   true_risk = c(t(w) %*% truth %*% w)
   

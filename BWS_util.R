@@ -474,7 +474,7 @@ rfm_bws = function (x, r, h = 6, batch_size = NULL, max.iter = 100,
 #' @param fraction whether to return fraction of variance unexplained or squared prediction errors
 #' 
 Frac_Var_bws = function (x_test, RFM_model, evaluation_type = "BWS", fraction = TRUE,
-                         return_predictions = FALSE) {
+                         Euclidean_mean, return_predictions = FALSE) {
   
   mu_hat = RFM_model$mu_hat
   E = RFM_model$E
@@ -531,11 +531,10 @@ Frac_Var_bws = function (x_test, RFM_model, evaluation_type = "BWS", fraction = 
       }
     } else if (evaluation_type == "Euclidean") {
       if (x.is.array) {
-        Euclidean_mu = colMeans(x_test, dims = 1)
         for (m in 1:n) {
           res[i] = res[i] + norm(x_hat[m,,] - x_test[m,,], type = "F")^2
           if (i == 1) {
-            total_var = total_var + norm(Euclidean_mu - x_test[m,,], type = "F")^2
+            total_var = total_var + norm(Euclidean_mean - x_test[m,,], type = "F")^2
           }
         }
       } else {
@@ -568,7 +567,7 @@ Frac_Var_bws = function (x_test, RFM_model, evaluation_type = "BWS", fraction = 
 #' @param fraction whether to return fraction of variance unexplained or squared prediction errors
 #' @param epsilon used in projecting predictions to SPD (only when evaluation type == "BWS")
 #' 
-Frac_Var_LYB = function (x_test, factor_model, mu_hat,
+Frac_Var_LYB = function (x_test, factor_model, mu_hat, Euclidean_mean,
                          evaluation_type = "BWS",
                          fraction = TRUE, return_predictions = FALSE,
                          epsilon = 1e-6) {
@@ -627,11 +626,10 @@ Frac_Var_LYB = function (x_test, factor_model, mu_hat,
       }
     } else if (evaluation_type == "Euclidean") {
       if (x.is.array) {
-        Euclidean_mu = colMeans(x_test, dims = 1)
         for (m in 1:n) {
           res[i] = res[i] + norm(x_hat[m,,] - x_test[m,,], type = "F")^2
           if (i == 1) {
-            total_var = total_var + norm(Euclidean_mu - x_test[m,,], type = "F")^2
+            total_var = total_var + norm(Euclidean_mean - x_test[m,,], type = "F")^2
           }
         }
       } else {

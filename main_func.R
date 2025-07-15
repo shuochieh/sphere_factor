@@ -44,6 +44,8 @@ main_BWS = function (x, r, test_size = 0, h = 6, batch_size = NULL, max.iter = 1
   n = dim(x)[1]
   p = dim(x)[2]
   
+  Euclidean_mean = colMeans(x[1:(n - test_size),,], dims = 1)
+  
   if (!is.null(true_A)) {
     A = true_A
   }
@@ -84,14 +86,18 @@ main_BWS = function (x, r, test_size = 0, h = 6, batch_size = NULL, max.iter = 1
   # results
   if (test_size > 0) {
     res1 = Frac_Var_bws(x_test, model, "BWS", fraction, 
-                        return_predictions = return_predictions)
+                        return_predictions = return_predictions,
+                        Euclidean_mean = Euclidean_mean)
     res2 = Frac_Var_bws(x_test, model, "Euclidean", fraction, 
-                        return_predictions = return_predictions)
+                        return_predictions = return_predictions,
+                        Euclidean_mean = Euclidean_mean)
   } else {
     res1 = Frac_Var_bws(x, model, "BWS", fraction, 
-                        return_predictions = return_predictions)
+                        return_predictions = return_predictions,
+                        Euclidean_mean = Euclidean_mean)
     res2 = Frac_Var_bws(x, model, "Euclidean", fraction, 
-                        return_predictions = return_predictions)
+                        return_predictions = return_predictions,
+                        Euclidean_mean = Euclidean_mean)
   }
   
   # estimate linear factor model
@@ -102,17 +108,22 @@ main_BWS = function (x, r, test_size = 0, h = 6, batch_size = NULL, max.iter = 1
   }
   model = LYB_fm(x_vector, r = r, h = h)
   r_hat_LYB = model$r_hat
+  V_LYB = model$V
   
   if (test_size > 0) {
     res3 = Frac_Var_LYB(x_test, model, mu_hat, "BWS", fraction, 
-                        return_predictions = return_predictions)
+                        return_predictions = return_predictions,
+                        Euclidean_mean = Euclidean_mean)
     res4 = Frac_Var_LYB(x_test, model, mu_hat, "Euclidean", fraction, 
-                        return_predictions = return_predictions)
+                        return_predictions = return_predictions,
+                        Euclidean_mean = Euclidean_mean)
   } else {
     res3 = Frac_Var_LYB(x, model, mu_hat, "BWS", fraction, 
-                        return_predictions = return_predictions)
+                        return_predictions = return_predictions,
+                        Euclidean_mean = Euclidean_mean)
     res4 = Frac_Var_LYB(x, model, mu_hat, "Euclidean", fraction, 
-                        return_predictions = return_predictions)
+                        return_predictions = return_predictions,
+                        Euclidean_mean = Euclidean_mean)
   }
   
   if (return_predictions) {
@@ -122,7 +133,8 @@ main_BWS = function (x, r, test_size = 0, h = 6, batch_size = NULL, max.iter = 1
                  "loading_dist" = subspace_dist,
                  "r_hat_RFM" = r_hat_RFM, "r_hat_LYB" = r_hat_LYB,
                  "Factors" = Factors, "z_bar" = z_bar,
-                 "V" = V, "E" = E, "E_lyapunov" = E_lyapunov,
+                 "V" = V, "V_LYB" = V_LYB,
+                 "E" = E, "E_lyapunov" = E_lyapunov,
                  "RFM_xhat" = res1$xhat, 
                  "LYB_xhat" = res3$xhat))
     
@@ -134,7 +146,8 @@ main_BWS = function (x, r, test_size = 0, h = 6, batch_size = NULL, max.iter = 1
                "loading_dist" = subspace_dist,
                "r_hat_RFM" = r_hat_RFM, "r_hat_LYB" = r_hat_LYB,
                "Factors" = Factors, "z_bar" = z_bar,
-               "V" = V, "E" = E, "E_lyapunov" = E_lyapunov))
+               "V" = V,  "V_LYB" = V_LYB,
+               "E" = E, "E_lyapunov" = E_lyapunov))
 }
 
 #' Streamlined function for synthetic and real data analysis with (product-)sphere-valued
@@ -164,6 +177,11 @@ main_sphere = function (x, r, test_size = 0, h = 6, tau = 0.5, max.iter = 100,
     n_test = test_size
   }
   
+  Euclidean_mean = vector("list", d)
+  for (j in 1:d) {
+    Euclidean_mean[[j]] = colMeans(x[[j]])
+  }
+  
   # estimate RFM
   model = rfm_sphere(x, r = r, h = h, tau = tau, max.iter = max.iter)
   V = model$A
@@ -191,11 +209,11 @@ main_sphere = function (x, r, test_size = 0, h = 6, tau = 0.5, max.iter = 100,
   
   # results
   if (test_size > 0) {
-    res1 = Frac_Var_sphere(x_test, model, "Sphere", fraction)
-    res2 = Frac_Var_sphere(x_test, model, "Euclidean", fraction)
+    res1 = Frac_Var_sphere(x_test, model, "Sphere", fraction, Euclidean_mean = Euclidean_mean)
+    res2 = Frac_Var_sphere(x_test, model, "Euclidean", fraction, Euclidean_mean = Euclidean_mean)
   } else {
-    res1 = Frac_Var_sphere(x, model, "Sphere", fraction)
-    res2 = Frac_Var_sphere(x, model, "Euclidean", fraction)
+    res1 = Frac_Var_sphere(x, model, "Sphere", fraction, Euclidean_mean = Euclidean_mean)
+    res2 = Frac_Var_sphere(x, model, "Euclidean", fraction, Euclidean_mean = Euclidean_mean)
   }
   
   # estimate linear model
@@ -207,11 +225,11 @@ main_sphere = function (x, r, test_size = 0, h = 6, tau = 0.5, max.iter = 100,
   r_hat_LYB = model$r_hat
   
   if (test_size > 0) {
-    res3 = Frac_Var_LYB(x_test, model, mu_hat, "Sphere", fraction)
-    res4 = Frac_Var_LYB(x_test, model, mu_hat, "Euclidean", fraction)
+    res3 = Frac_Var_LYB(x_test, model, mu_hat, "Sphere", fraction, Euclidean_mean = Euclidean_mean)
+    res4 = Frac_Var_LYB(x_test, model, mu_hat, "Euclidean", fraction, Euclidean_mean = Euclidean_mean)
   } else {
-    res3 = Frac_Var_LYB(x, model, mu_hat, "Sphere", fraction)
-    res4 = Frac_Var_LYB(x, model, mu_hat, "Euclidean", fraction)
+    res3 = Frac_Var_LYB(x, model, mu_hat, "Sphere", fraction, Euclidean_mean = Euclidean_mean)
+    res4 = Frac_Var_LYB(x, model, mu_hat, "Euclidean", fraction, Euclidean_mean = Euclidean_mean)
   }
   
   return (list("mu_hat" = mu_hat,

@@ -349,7 +349,8 @@ rfm_sphere = function (x, r, h = 6, tau = 0.5, max.iter = 100) {
 #' @param evaluation_type to compute geodesic or Euclidean distance
 #' @param  fraction whether to return fraction of variance unexplained or squared prediction errors
 #' 
-Frac_Var_sphere = function (x_test, RFM_model, evaluation_type = "Sphere", fraction = TRUE) {
+Frac_Var_sphere = function (x_test, RFM_model, Euclidean_mean,
+                            evaluation_type = "Sphere", fraction = TRUE) {
   
   mu_hat = RFM_model$mu_hat
   E = RFM_model$E  # list of q_j by (q_j-1)
@@ -403,11 +404,10 @@ Frac_Var_sphere = function (x_test, RFM_model, evaluation_type = "Sphere", fract
       }
     } else if (evaluation_type == "Euclidean") {
       for (j in 1:d) {
-        Euclidean_mu = colMeans(x_test[[j]])
         res[i] = res[i] + sum(norm(x_hat[[j]] - x_test[[j]], "F")^2)
         if (i == 1) {
           for (m in 1:n) {
-            total_var = total_var + sum((Euclidean_mu - x_test[[j]][m,])^2)
+            total_var = total_var + sum((Euclidean_mean[[j]] - x_test[[j]][m,])^2)
           }
         }
       }
@@ -434,7 +434,7 @@ Frac_Var_sphere = function (x_test, RFM_model, evaluation_type = "Sphere", fract
 #' @param evaluation_type to compute geodesic or Euclidean distances
 #' @param fraction whether to return fraction of variance unexplained or squared prediction errors
 #' 
-Frac_Var_LYB = function (x_test, factor_model, mu_hat,
+Frac_Var_LYB = function (x_test, factor_model, mu_hat, Euclidean_mean,
                          evaluation_type = "Sphere",
                          fraction = TRUE) {
   
@@ -486,12 +486,10 @@ Frac_Var_LYB = function (x_test, factor_model, mu_hat,
       }
     } else if (evaluation_type == "Euclidean") {
       for (j in 1:d) {
-        Euclidean_mu = colMeans(x_test[[j]])
-        
         res[i] = res[i] + sum(norm(x_hat[[j]] - x_test[[j]], "F")^2)
         if (i == 1) {
           for (m in 1:n) {
-            total_var = total_var + sum((Euclidean_mu - x_test[[j]][m,])^2)
+            total_var = total_var + sum((Euclidean_mean[[j]] - x_test[[j]][m,])^2)
           }
         }
       }
