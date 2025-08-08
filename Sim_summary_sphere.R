@@ -28,15 +28,15 @@ for (case in c(1:1)) {
       oracle_Sphere = Re(e$oracle_Sphere)
       
       cat("Case", case, "n =", n, "p =", p, "\n")
-      cat("Geodesic FVU (RFM):", cat_assist(round(colMeans(FVU_RFM_Sphere) * 100, 1)), "\n")
-      cat("Geodesic FVU (LYB):", cat_assist(round(colMeans(FVU_LYB_Sphere) * 100, 1)), "\n")
-      cat("Geodesic FVU (RFM) SD:", cat_assist(round(apply(FVU_RFM_Sphere * 100, 2, sd), 1), 2), "\n")
-      cat("Geodesic FVU (LYB) SD:", cat_assist(round(apply(FVU_LYB_Sphere * 100, 2, sd), 1), 2), "\n")
-      cat("Oracle:", round(mean(oracle_Sphere * 100), 1), 
-          "SD:", round(sd(oracle_Sphere * 100), 1), "\n\n")
+      cat("Geodesic FVU (RFM):", cat_assist(round(colMeans(FVU_RFM_Sphere), 2)), "\n")
+      cat("Geodesic FVU (LYB):", cat_assist(round(colMeans(FVU_LYB_Sphere), 2)), "\n")
+      cat("Geodesic FVU (RFM) SD:", cat_assist(round(apply(FVU_RFM_Sphere, 2, sd), 2), 2), "\n")
+      cat("Geodesic FVU (LYB) SD:", cat_assist(round(apply(FVU_LYB_Sphere, 2, sd), 2), 2), "\n")
+      cat("Oracle:", round(mean(oracle_Sphere), 1), 
+          "SD:", round(sd(oracle_Sphere), 1), "\n\n")
       
       plot_assist(FVU_RFM_Sphere, res2 = FVU_LYB_Sphere, oracle = mean(oracle_Sphere), 
-                  labs = c("number of factors", "rMSE"), ylim = c(0.0, 1),
+                  labs = c("number of factors", "rMSE"), ylim = c(0.0, 1.0),
                   main = paste0("n = ", n, "; q = ", p))
     }
   }
@@ -67,10 +67,10 @@ for (case in 1:1) {
       ratio = FVU_RFM_Euc / FVU_LYB_Euc
       
       cat("Case", case, "n =", n, "d =", p, "\n")
-      cat("Euclidean FVU (RFM):", cat_assist(round(colMeans(FVU_RFM_Euc) * 100, 1)), "\n")
-      cat("Euclidean FVU (LYB):", cat_assist(round(colMeans(FVU_LYB_Euc) * 100, 1)), "\n")
-      cat("Euclidean FVU (RFM) SD:", cat_assist(round(apply(FVU_RFM_Euc * 100, 2, sd), 1), 2), "\n")
-      cat("Euclidean FVU (LYB) SD:", cat_assist(round(apply(FVU_LYB_Euc * 100, 2, sd), 1), 2), "\n")
+      cat("Euclidean FVU (RFM):", cat_assist(round(colMeans(FVU_RFM_Euc), 2)), "\n")
+      cat("Euclidean FVU (LYB):", cat_assist(round(colMeans(FVU_LYB_Euc), 2)), "\n")
+      cat("Euclidean FVU (RFM) SD:", cat_assist(round(apply(FVU_RFM_Euc, 2, sd), 2), 2), "\n")
+      cat("Euclidean FVU (LYB) SD:", cat_assist(round(apply(FVU_LYB_Euc, 2, sd), 2), 2), "\n")
       cat("Ratio of Euclidean FVU:", round(colMeans(ratio), 2), "\n\n")
       # cat("Ratio SD:", round(apply(ratio, 2, sd), 2), "\n\n")
       
