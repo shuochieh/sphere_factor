@@ -2,29 +2,59 @@
 # source("./sphere_util.R")
 # source("./BWS_util.R")
 
-subspace_d = function (U, V) {
-  if (is.vector(U)) {
-    U = U / sqrt(sum(U^2))
-    P1 = U %*% t(U)
-    q1 = 1
-  } else {
-    Q = qr.Q(qr(U))
-    P1 = Q %*% t(Q)
-    q1 = ncol(U)
+subspace_d = function (U, V, type = "sine-theta") {
+  if (type == "trace-projection") {
+    if (is.vector(U)) {
+      U = U / sqrt(sum(U^2))
+      P1 = U %*% t(U)
+      q1 = 1
+    } else {
+      Q = qr.Q(qr(U))
+      P1 = Q %*% t(Q)
+      q1 = ncol(U)
+    }
+    if (is.vector(V)) {
+      V = V / sqrt(sum(V^2))
+      P2 = V %*% t(V)
+      q2 = 1
+    } else {
+      Q = qr.Q(qr(V))
+      P2 = Q %*% t(Q)
+      q2 = ncol(V)
+    }
+    
+    res = 1 - sum(diag(P1 %*% P2)) / max(q1, q2)
+    
+    res = sqrt(res)
   }
-  if (is.vector(V)) {
-    V = V / sqrt(sum(V^2))
-    P2 = V %*% t(V)
-    q2 = 1
-  } else {
-    Q = qr.Q(qr(V))
-    P2 = Q %*% t(Q)
-    q2 = ncol(V)
+  if (type == "sine-theta") {
+    if (is.vector(U)) {
+      if (!is.vector(V)) {
+        # stop("subspace_d: U and V must have the same dimension for sine-theta distance")
+        return (Inf)
+      }
+      res = acos(c(t(U) %*% V))
+      res = sin(res)
+    } else if (is.vector(V)) {
+      if (!is.vector(U)) {
+        # stop("subspace_d: U and V must have the same dimension for sine-theta distance")
+        return (Inf)
+      }
+      res = acos(c(t(U) %*% V))
+      res = sin(res)
+    } else {
+      if (ncol(U) != ncol(V)) {
+        # stop("subspace_d: U and V must have the same dimension for sine-theta distance")
+        return (Inf)
+      }
+      Q1 = qr.Q(qr(U))
+      Q2 = qr.Q(qr(V))
+      
+      res = max(sin(acos(svd(t(Q1) %*% Q2)$d)))
+    }
   }
-  
-  res = 1 - sum(diag(P1 %*% P2)) / max(q1, q2)
-  
-  return (sqrt(res))
+
+  return (res)
 }
 
 #' Streamlined function for synthetic and real data analysis with BWS-data

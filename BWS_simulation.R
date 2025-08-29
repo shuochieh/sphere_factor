@@ -80,16 +80,10 @@ dta_gen_BWS = function (n, p, mu_type, r = 5,
     
     V_nless = log_to_tangent(Z_nless[t,], coord$E)
     X_nless[t,,] = Exp_BWS_core(V_nless, mu)
-    
-    # pct <- floor(10 * t / n)  
-    # if (pct > reported) {
-    #   cat("  dta_gen:", paste0(pct * 10, "% complete\n"))
-    #   reported <- pct
-    # }
   }
   
   return (list("X" = X, "X_nless" = X_nless, "Z" = Z, "Z_nless" = Z_nless, 
-               "A" = A, "Factors" = Factors, "mu" = mu))
+               "A" = A, "Factors" = Factors, "mu" = mu, "coord" = coord))
 }
 
 ### Test: Do not run
@@ -160,26 +154,25 @@ plot_assist = function (res1, res2 = NULL, oracle = NULL,
 num_sim = 300
 
 # CASE SWITCHING HELPER
-# n = 50, p = 10
-# Case 1: alpha = 0.5, z_noise = 1.5; mu_type = 1 (base line)
+# Case 1: alpha = 0.8, z_noise = 1.5; mu_type = 1 (high line)
 # Case 2: alpha = 0.2, z_noise = 1.5; mu_type = 1 (low signal)
-# Case 3: alpha = 0.8, z_noise = 1.5; mu_type = 1 (high signal)
-# Case 4: alpha = 0.5, z_noise = 1.5; mu_type = 2
-# Case 5: alpha = 0.2, z_noise = 1.5; mu_type = 2
-# Case 6: alpha = 0.8, z_noise = 1.5; mu_type = 2
+# Case 3: alpha = 0.8, z_noise = 1.5; mu_type = 2
+# Case 4: alpha = 0.2, z_noise = 1.5; mu_type = 2
 case_param = function (case) {
   if (case == 1) {
-    alpha = 0.5; z_noise = 1.0; s = 1.5; mu_type = 1
+    alpha = 0.8; z_noise = 1.0; s = 1.5; mu_type = 1
   } else if (case == 2) {
     alpha = 0.2; z_noise = 1.0; s = 1.5; mu_type = 1
   } else if (case == 3) {
-    alpha = 0.8; z_noise = 1.0; s = 1.5; mu_type = 1
-  } else if (case == 4) {
-    alpha = 0.5; z_noise = 1.0; s = 1.5; mu_type = 2
-  } else if (case == 5) {
-    alpha = 0.2; z_noise = 1.0; s = 1.5; mu_type = 2
-  } else if (case == 6) {
     alpha = 0.8; z_noise = 1.0; s = 1.5; mu_type = 2
+  } else if (case == 4) {
+    alpha = 0.2; z_noise = 1.0; s = 1.5; mu_type = 2
+  } else if (case == 5) {
+    # alpha = 0.2; z_noise = 1.0; s = 1.5; mu_type = 2
+    stop("case_param: unsupported case")
+  } else if (case == 6) {
+    # alpha = 0.8; z_noise = 1.0; s = 1.5; mu_type = 2
+    stop("case_param: unsupported case")
   } else {
     stop("case_param: unsupported case")
   } 
@@ -188,7 +181,7 @@ case_param = function (case) {
                "mu_type" = mu_type))
 }
 
-for (case in c(2, 3, 5, 6)) {
+for (case in c(1:4)) {
   cat("Case:", case, "...\n")
   parms = case_param(case)
   s = parms$s
@@ -208,7 +201,8 @@ for (case in c(2, 3, 5, 6)) {
                                             s = s, z_noise = z_noise, alpha = alpha)
                           sim_res = main_BWS(dta$X, 10, test_size = 200, h = 6, batch_size = 16,
                                              max.iter = 16, true_A = dta$A, true_mu = dta$mu)
-                          oracle_BWS = sum(geod_BWS(dta$X_nless, dta$X)^2) / sum(geod_BWS(dta$mu, dta$X)^2)
+                          oracle_BWS = tail(Frac_Var_ora(dta$X[(n + 1):(n + 200),,], dta), 1) 
+                          # oracle_BWS = sum(geod_BWS(dta$X_nless, dta$X)^2) / sum(geod_BWS(dta$mu, dta$X)^2)
                           
                           sink()
                           cat("  iteration", i, "\n")

@@ -651,6 +651,99 @@ Frac_Var_LYB = function (x_test, factor_model, mu_hat, Euclidean_mean,
   return (res)
 }
 
+#' This function is used internally to evaluate the factor models
+#' 
+#' Computes evaluation metric for Oracle on BWS
+#' 
+#' @param x_test raw test data
+#' @param dta object output from dta_gen_BWS
+#' @param evaluation_type to compute BWS distance or Euclidean (Frobenius distance)
+#' @param fraction whether to return fraction of variance unexplained or squared prediction errors
+#' 
+Frac_Var_ora = function (x_test, dta,
+                         evaluation_type = "BWS", fraction = TRUE,
+                         Euclidean_mean, return_predictions = FALSE) {
+  
+  mu_hat = dta$mu
+  E = dta$coord$E
+  E_lyapunov = dta$coord$E_lyapunov
+  
+  # factor_model = RFM_model$factor_model
+  
+  Factors = dta$Factors
+  V = dta$A
+  r = dim(V)[2]
+  
+  if (length(dim(x_test)) == 3) {
+    n = dim(x_test)[1]
+    p = dim(x_test)[2]
+    x.is.array = TRUE
+  } else if (length(dim(x_test)) == 2) {
+    n = 1
+    p = dim(x_test)[1]
+    x.is.array = FALSE
+  }
+  
+  # construct log-mapped data
+  log_x_vec = log_vec_construct(x_test, mu_hat, E_lyapunov)
+  
+  # make predictions and evaluate
+  res = rep(0, r)
+  total_var = 0
+  for (i in 1:r) {
+    z_hat = predict_fm(V[,1:i], 0, log_x_vec)
+    
+    # predict
+    if (x.is.array) {
+      x_hat = array(NA, dim = c(n, p, p))
+      for (m in 1:n) {
+        temp = log_to_tangent(z_hat[m,], E)
+        x_hat[m,,] = Exp_BWS(temp, mu_hat)
+      }
+    } else {
+      temp = log_to_tangent(z_hat, E)
+      x_hat = Exp_BWS(temp, mu_hat)
+    }
+    
+    # evaluate
+    if (evaluation_type == "BWS") {
+      if (x.is.array) {
+        for (m in 1:n) {
+          res[i] = res[i] + geod_BWS_core(x_hat[m,,], x_test[m,,])^2
+          if (i == 1) {
+            total_var = total_var + geod_BWS_core(mu_hat, x_test[m,,])^2
+          }
+        }
+      } else {
+        res[i] = geod_BWS_core(x_hat, x_test)^2
+      }
+    } else if (evaluation_type == "Euclidean") {
+      if (x.is.array) {
+        for (m in 1:n) {
+          res[i] = res[i] + norm(x_hat[m,,] - x_test[m,,], type = "F")^2
+          if (i == 1) {
+            total_var = total_var + norm(Euclidean_mean - x_test[m,,], type = "F")^2
+          }
+        }
+      } else {
+        res = norm(x_hat - x_test, type = "F")^2
+      }
+    } else {
+      stop("Frac_Var_bws: unsupported evaluation type")
+    }
+  }
+  
+  if (fraction) {
+    res = res / total_var
+  }
+  
+  if (return_predictions) {
+    return (list("res" = res, "xhat" = x_hat))
+  }
+  
+  return (res)
+}
+
 
 VAR1 <- function(X) {
   X <- as.matrix(X)

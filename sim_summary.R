@@ -61,7 +61,7 @@ cat_assist = function (x, type = 1) {
 }
 
 par(mfrow = c(2, 3))
-for (case in c(2, 3, 5, 6)) {
+for (case in c(1:4)) {
   for (p in c(5, 10)) {
     for (n in c(50, 100, 200)) {
       e <- new.env()
@@ -91,39 +91,39 @@ for (case in c(2, 3, 5, 6)) {
   }
 }
 
-dev.off()
-par(mfrow = c(3, 3))
-for (case in 1:6) {
-  ns = c(50, 100, 200)
-  ps = c(5, 10, 20)
-  for (n_i in 1:3) {
-    for (p_i in 1:3) {
-      n = ns[n_i] ; p = ps[p_i]
-      
-      e <- new.env()
-      load(paste0("./save/FVU_RFM_Euc_n", n, "_p", p, "_case", case, ".RData"), envir = e)
-      FVU_RFM_Euc = Re(e$FVU_RFM_Euc)
-      
-      e <- new.env()
-      load(paste0("./save/FVU_LYB_Euc_n", n, "_p", p, "_case", case, ".RData"), envir = e)
-      FVU_LYB_Euc = Re(e$FVU_LYB_Euc)
-      
-      ratio = FVU_RFM_Euc / FVU_LYB_Euc
-      
-      cat("Case", case, "n =", n, "p =", p, "\n")
-      cat("Ratio of Euclidean FVU:", round(colMeans(ratio), 2), "\n")
-      cat("Ratio SD:", round(apply(ratio, 2, sd), 2), "\n\n")
-
-      plot_assist(ratio, oracle = mean(oracle_BWS), 
-                  labs = c("number of factors", "Euclidean FVU ratio"), ylim = c(0.5, 1.5),
-                  main = paste0("n = ", n, "; q = ", p))
-    }
-  }
-}
+# dev.off()
+# par(mfrow = c(3, 3))
+# for (case in 1:6) {
+#   ns = c(50, 100, 200)
+#   ps = c(5, 10, 20)
+#   for (n_i in 1:3) {
+#     for (p_i in 1:3) {
+#       n = ns[n_i] ; p = ps[p_i]
+#       
+#       e <- new.env()
+#       load(paste0("./save/FVU_RFM_Euc_n", n, "_p", p, "_case", case, ".RData"), envir = e)
+#       FVU_RFM_Euc = Re(e$FVU_RFM_Euc)
+#       
+#       e <- new.env()
+#       load(paste0("./save/FVU_LYB_Euc_n", n, "_p", p, "_case", case, ".RData"), envir = e)
+#       FVU_LYB_Euc = Re(e$FVU_LYB_Euc)
+#       
+#       ratio = FVU_RFM_Euc / FVU_LYB_Euc
+#       
+#       cat("Case", case, "n =", n, "p =", p, "\n")
+#       cat("Ratio of Euclidean FVU:", round(colMeans(ratio), 2), "\n")
+#       cat("Ratio SD:", round(apply(ratio, 2, sd), 2), "\n\n")
+# 
+#       plot_assist(ratio, oracle = mean(oracle_BWS), 
+#                   labs = c("number of factors", "Euclidean FVU ratio"), ylim = c(0.5, 1.5),
+#                   main = paste0("n = ", n, "; q = ", p))
+#     }
+#   }
+# }
 
 dev.off()
 par(mfrow = c(2, 2))
-for (case in c(2, 3, 5, 6)) {
+for (case in c(1:4)) {
   ns = c(50, 100, 200)
   ps = c(5, 10)
   for (p_i in 1:2) {
@@ -160,8 +160,29 @@ for (case in c(2, 3, 5, 6)) {
   }
 }
 
+
+bar_plot_assist = function (x, y, main = "", if.legend = FALSE) {
+  tx <- table(x)
+  ty <- table(y)
+  
+  all_vals <- as.character(1:10)
+  px <- as.numeric(tx[all_vals]); px[is.na(px)] <- 0; px <- px / sum(px)
+  py <- as.numeric(ty[all_vals]); py[is.na(py)] <- 0; py <- py / sum(py)
+  
+  probs <- rbind(px, py)
+  colnames(probs) <- all_vals
+  rownames(probs) <- c("LFM", "RFM")
+  
+  barplot(probs, beside = TRUE, col = c("lightsalmon", "lightblue"),
+          legend = if.legend, xlab = "selected number of factors", 
+          ylab = "",
+          main = main,
+          ylim = c(0, 1))
+}
+
 dev.off()
-for (case in c(2, 3, 5, 6)) {
+par(mfrow = c(2, 3))
+for (case in c(1:4)) {
   for (p in c(5, 10)) {
     for (n in c(50, 100, 200)) {
       e <- new.env()
@@ -172,6 +193,21 @@ for (case in c(2, 3, 5, 6)) {
       load(paste0("./save/r_hat_LYB_n", n, "_p", p, "_case", case, ".RData"), envir = e)
       r_hat_LYB = Re(e$r_hat_LYB)
       
+      if (p == 10) {
+        if (case == 1) {
+          type_text = "M = M1 (high signal)"
+        } else if (case == 2) {
+          type_text = "M = M1 (low signal)"
+        } else if (case == 3) {
+          type_text = "M = M2 (high signal)"
+        } else if (case == 4) {
+          type_text = "M = M2 (low signal)"
+        }
+        bar_plot_assist(r_hat_LYB, r_hat_RFM,
+                        main = paste0("n = ", n, "; q = ", p, "; ", type_text),
+                        if.legend = ((n == 50) * (p == 10) == 1))
+      }
+
       cat("Case", case, "n =", n, "p =", p, "\n")
       cat("RFM frequency of correct rank:", round(mean(r_hat_RFM == 5), 2), "\n")
       cat("LYB frequency of correct rank:", round(mean(r_hat_LYB == 5), 2), "\n\n")
