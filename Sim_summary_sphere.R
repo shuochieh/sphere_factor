@@ -120,7 +120,27 @@ for (case in 1:1) {
   }
 }
 
+bar_plot_assist = function (x, y, main = "", if.legend = FALSE) {
+  tx <- table(x)
+  ty <- table(y)
+  
+  all_vals <- as.character(1:10)
+  px <- as.numeric(tx[all_vals]); px[is.na(px)] <- 0; px <- px / sum(px)
+  py <- as.numeric(ty[all_vals]); py[is.na(py)] <- 0; py <- py / sum(py)
+  
+  probs <- rbind(px, py)
+  colnames(probs) <- all_vals
+  rownames(probs) <- c("LFM", "RFM")
+  
+  barplot(probs, beside = TRUE, col = c("lightsalmon", "lightblue"),
+          legend = if.legend, xlab = "selected number of factors", 
+          ylab = "",
+          main = main,
+          ylim = c(0, 1))
+}
+
 dev.off()
+par(mfrow = c(3, 3))
 for (case in 1:1) {
   for (p in c(5, 10, 20)) {
     for (n in c(50, 100, 200)) {
@@ -131,6 +151,10 @@ for (case in 1:1) {
       e <- new.env()
       load(paste0("./save/r_hat_LYB_Sphere_n", n, "_d", p, "_case", case, ".RData"), envir = e)
       r_hat_LYB = Re(e$r_hat_LYB)
+      
+      bar_plot_assist(r_hat_LYB, r_hat_RFM,
+                      main = paste0("n = ", n, "; d = ", p),
+                      if.legend = ((n == 50) * (p == 5) == 1))
       
       cat("Case", case, "n =", n, "d =", p, "\n")
       cat("RFM frequency of correct rank:", round(mean(r_hat_RFM == 5), 2), "\n")

@@ -50,7 +50,9 @@ subspace_d = function (U, V, type = "sine-theta") {
       Q1 = qr.Q(qr(U))
       Q2 = qr.Q(qr(V))
       
-      res = max(sin(acos(svd(t(Q1) %*% Q2)$d)))
+      res = pmin(pmax(svd(t(Q1) %*% Q2)$d, 0), 1) # for numerical stability
+      
+      res = max(sin(acos(res)))
     }
   }
 
