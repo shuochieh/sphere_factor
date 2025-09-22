@@ -243,7 +243,7 @@ for (k in 1:15) {
 
 par(mfrow = c(1, 2))
 plot_assist(diag_loss[2,] / diag_loss[1,], res2 = offdiag_loss[2,] / offdiag_loss[1,],
-            ylim = c(0.7, 2.0), x_vals = 1:15,
+            ylim = c(0.0, 1.5), x_vals = 1:15,
             labs = c("number of factors", "ratio"))
 legend("topright",
        legend = c("Diagonal", "Off-diagonal"),
@@ -313,23 +313,24 @@ for (i in 1:14) {
   
   rownames(Exp_V) = selected_companies
   colnames(Exp_V) = selected_companies
+  lim = 35
   if (i < 7) {
-    ps[[i]] = heat_plot(Exp_V, paste("t =", round(inc,2)), lims = c(-45, 45)) + 
+    ps[[i]] = heat_plot(Exp_V, paste("t =", round(inc,2)), lims = c(-lim, lim)) + 
       theme(legend.position = "none") +
       theme(plot.margin = unit(c(0.0, 0.2, 0.0, 0.0), "cm")) + 
       theme(axis.text.y = element_blank())
   } else if (i == 7) {
-    ps[[i]] = heat_plot(Exp_V, paste("t =", round(inc,2)), lims = c(-45, 45)) +
+    ps[[i]] = heat_plot(Exp_V, paste("t =", round(inc,2)), lims = c(-lim, lim)) +
       theme(legend.position = "none") +
       theme(plot.margin = unit(c(0.0, 0.2, 0.0, 0.0), "cm")) + 
       theme(axis.text.y = element_blank())
   } else if (i < 14) {
-    ps[[i]] = heat_plot(Exp_V, paste("t =", round(inc,2)), lims = c(-45, 45)) + 
+    ps[[i]] = heat_plot(Exp_V, paste("t =", round(inc,2)), lims = c(-lim, lim)) + 
       theme(legend.position = "none") +
       theme(plot.margin = unit(c(0.0, 0.2, 0.0, 0.0), "cm")) + 
       theme(axis.text.y = element_blank())
   } else {
-    ps[[i]] = heat_plot(Exp_V, paste("t =", round(inc,2)), lims = c(-45, 45)) +
+    ps[[i]] = heat_plot(Exp_V, paste("t =", round(inc,2)), lims = c(-lim, lim)) +
       theme(legend.position = "none") +
       theme(plot.margin = unit(c(0.0, 0.2, 0.0, 0.0), "cm")) + 
       theme(axis.text.y = element_blank())
@@ -549,7 +550,7 @@ legend("bottomright",
 x_dates = tail(dta_dates, 36)
 plot(x = x_dates, 
      y = Euc_errors[1,], type = "n",
-     ylim = c(0, 55), 
+     ylim = c(0, 60), 
      xlab = "", ylab = "Frobenius distance", bty = "L")
 grid(col = "lightgray", lty = "dotted", lwd = 1)
 lines(x_dates, Euc_errors[2,], col = "firebrick", lwd = 1.5, lty = 2)
@@ -629,7 +630,7 @@ points(x_dates, risk_error[4,], col = "mediumpurple1", pch = 15, cex = 0.8)
 lines(x_dates, risk_error[1,], col = "steelblue", lwd = 2)
 points(x_dates, risk_error[1,], col = "lightblue", pch = 19, cex = 0.8)
 
-legend("topright",
+legend(x = x_dates[1], y = 18,
        legend = c(paste0("RFM (Mean = ", round(mean(risk_error[1,]), 2), "; Median = ", round(median(risk_error[1,]), 2), ")"), 
                   paste0("LFM (Mean = ", round(mean(risk_error[2,]), 2), "; Median = ", round(median(risk_error[2,]), 2), ")"), 
                   paste0("LOCF (Mean = ", round(mean(risk_error[3,]), 2), "; Median = ", round(median(risk_error[3,]), 2), ")"),
@@ -637,7 +638,7 @@ legend("topright",
        col = c("steelblue", "firebrick", "darkseagreen4", "mediumpurple4"),
        lty = c(1, 2, 4, 6), lwd = c(2, 1.5, 1.5, 1.5), bty = "n",
        cex = 0.8)
-legend("topright",
+legend(x = x_dates[1] + 11, y = 18,
        legend = c(paste0("RFM (Mean = ", round(mean(risk_error[1,]), 2), "; Median = ", round(median(risk_error[1,]), 2), ")"), 
                   paste0("LFM (Mean = ", round(mean(risk_error[2,]), 2), "; Median = ", round(median(risk_error[2,]), 2), ")"), 
                   paste0("LOCF (Mean = ", round(mean(risk_error[3,]), 2), "; Median = ", round(median(risk_error[3,]), 2), ")"),
